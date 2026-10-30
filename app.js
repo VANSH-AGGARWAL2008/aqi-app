@@ -3,6 +3,13 @@
 // Main application logic for the Delhi AQI Map.
 // ─────────────────────────────────────────────
 
+// ── Backend URL Configuration ────────────────────────────────────────────────
+// Automatically connects to local backend when running on localhost/127.0.0.1;
+// otherwise uses the deployed production backend placeholder URL.
+const API_BASE = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+  ? "http://localhost:8000"
+  : "https://aqi-app.onrender.com";
+
 
 // ── IDW tuning constants ──────────────────────────────────────────────────────
 // Change IDW_POWER to experiment with how fast station influence drops off.
@@ -164,12 +171,7 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-// ── 3. Backend Proxy Configuration ─────────────────────────────────────────
-// All external APIs (WAQI, ORS, Open-Meteo) are proxied through backend/app.py.
-// No API keys exist in the frontend code.
-var API_BASE = (typeof BACKEND_URL !== "undefined" && BACKEND_URL)
-  ? BACKEND_URL
-  : ((window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") ? "http://127.0.0.1:8000" : "");
+// ── 3. Leaflet Map Setup ──────────────────────────────────────────────────
 
 
 // ── 4. Initialise the Leaflet map ────────────────────────────────────────────

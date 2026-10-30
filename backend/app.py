@@ -114,7 +114,7 @@ async def security_and_rate_limit_middleware(request: Request, call_next):
         "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
         "style-src 'self' 'unsafe-inline' https://unpkg.com; "
         "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com; "
-        "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000; "
+        "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https://aqi-app.onrender.com https://*.onrender.com; "
         "font-src 'self'; "
         "frame-ancestors 'none';"
     )
