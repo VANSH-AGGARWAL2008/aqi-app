@@ -863,6 +863,30 @@ function setActiveHealthProfile(profileKey) {
   }
 }
 
+// State for health alert dismissal (persists in-memory until AQI category changes or reload)
+var healthAlertDismissedCategory = null;
+
+function bindHealthAlertClose(category) {
+  var closeBtn = document.getElementById("close-health-alert-btn");
+  if (closeBtn && !closeBtn.dataset.bound) {
+    closeBtn.dataset.bound = "true";
+    closeBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      var alertBanner = document.getElementById("health-alert-banner");
+      if (alertBanner) {
+        alertBanner.style.display = "none";
+      }
+      healthAlertDismissedCategory = closeBtn.dataset.category || category || "dismissed";
+      if (map) {
+        setTimeout(function () { map.invalidateSize(); }, 60);
+      }
+    });
+  }
+  if (closeBtn && category) {
+    closeBtn.dataset.category = category;
+  }
+}
+
 // Update the Health Advice Panel and screen-top Red Alert Banner
 function updateHealthAdvicePanel() {
   var advicePanel = document.getElementById("health-advice-panel");
@@ -905,14 +929,47 @@ function updateHealthAdvicePanel() {
   // Screen-top red warning banner if AQI exceeds active profile threshold
   var activeProfile = getActiveHealthProfile();
   if (alertBanner) {
+    // If AQI category changed since last dismissal, reset dismissal so new category alert can show
+    if (healthAlertDismissedCategory && healthAlertDismissedCategory !== adviceObj.category) {
+      healthAlertDismissedCategory = null;
+    }
+
     if (aqi >= activeProfile.threshold) {
-      alertBanner.innerHTML =
-        "⚠️ <strong>Health Alert (" + escapeHtml(activeProfile.label) + "):</strong> " +
-        "Local AQI is <strong>" + aqi + "</strong> (exceeds your " +
-        activeProfile.threshold + " threshold). " + escapeHtml(adviceObj.advice);
-      alertBanner.style.display = "block";
+      if (healthAlertDismissedCategory === adviceObj.category) {
+        // User dismissed the banner for this category: keep it hidden
+        if (alertBanner.style.display !== "none") {
+          alertBanner.style.display = "none";
+          if (map) setTimeout(function () { map.invalidateSize(); }, 60);
+        }
+      } else {
+        var contentEl = document.getElementById("health-alert-content");
+        var bannerText =
+          "⚠️ <strong>Health Alert (" + escapeHtml(activeProfile.label) + "):</strong> " +
+          "Local AQI is <strong>" + aqi + "</strong> (exceeds your " +
+          activeProfile.threshold + " threshold). " + escapeHtml(adviceObj.advice);
+
+        if (contentEl) {
+          contentEl.innerHTML = bannerText;
+        } else {
+          alertBanner.innerHTML =
+            '<div id="health-alert-content" class="health-alert-content">' + bannerText + '</div>' +
+            '<button type="button" id="close-health-alert-btn" class="health-alert-close" aria-label="Dismiss health alert" title="Dismiss health alert">✕</button>';
+        }
+        bindHealthAlertClose(adviceObj.category);
+
+        var wasHidden = (alertBanner.style.display === "none" || !alertBanner.style.display);
+        alertBanner.style.display = "flex";
+        if (wasHidden && map) {
+          setTimeout(function () { map.invalidateSize(); }, 60);
+        }
+      }
     } else {
+      var wasVisible = (alertBanner.style.display !== "none");
       alertBanner.style.display = "none";
+      healthAlertDismissedCategory = null;
+      if (wasVisible && map) {
+        setTimeout(function () { map.invalidateSize(); }, 60);
+      }
     }
   }
 }
@@ -2427,7 +2484,7 @@ function switchPage(pageKey) {
     if (PAGE_VIEWS[k]) {
       if (k === targetKey) {
         PAGE_VIEWS[k].classList.add("active");
-        PAGE_VIEWS[k].style.display = "block";
+        PAGE_VIEWS[k].style.display = (k === "map") ? "flex" : "block";
       } else {
         PAGE_VIEWS[k].classList.remove("active");
         PAGE_VIEWS[k].style.display = "none";

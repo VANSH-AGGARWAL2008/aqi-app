@@ -27,8 +27,13 @@
   --table-border: rgba(255, 255, 255, 0.08);
 }
 
+body.dark-mode {
+  color-scheme: dark;
+}
+
 body:not(.dark-mode) {
   /* Light Mode Palette */
+  color-scheme: light;
   --bg-gradient: linear-gradient(145deg, #f0f6ff 0%, #e2eafc 50%, #d8e5f8 100%);
   --nav-bg: rgba(255, 255, 255, 0.88);
   --glass-bg: rgba(255, 255, 255, 0.85);
@@ -49,6 +54,25 @@ body:not(.dark-mode) {
   --table-row-even: rgba(0, 0, 0, 0.02);
   --table-row-hover: rgba(37, 99, 235, 0.08);
   --table-border: #e2e8f0;
+}
+
+/* Ensure dropdown select and options have solid backgrounds and clear readability in both themes */
+select {
+  font-family: inherit;
+  border-radius: 6px;
+  outline: none;
+}
+
+body.dark-mode select,
+body.dark-mode select option {
+  background-color: #0b1e33 !important;
+  color: #f8fafc !important;
+}
+
+body:not(.dark-mode) select,
+body:not(.dark-mode) select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
 }
 
 * {
@@ -235,13 +259,26 @@ html, body {
    ───────────────────────────────────────────────────────────────────────────── */
 #view-map {
   position: relative;
+  display: flex;
+  flex-direction: column;
   height: calc(100vh - 56px);
   width: 100%;
   overflow: hidden;
   margin-top: 56px;
 }
 
+.map-container {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 #map {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
   width: 100%;
   background: #1e293b;
@@ -269,19 +306,50 @@ body.dark-mode .leaflet-tile-pane {
 }
 
 .health-alert-banner {
-  position: fixed;
-  top: 56px;
-  left: 0;
+  position: relative; /* Normal flow directly below navbar: pushes map down, never overlaps */
   width: 100%;
   background: linear-gradient(90deg, #dc2626 0%, #b91c1c 100%);
   color: #fff;
-  text-align: center;
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
-  z-index: 8000;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+  box-shadow: 0 3px 10px rgba(220, 38, 38, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: 1500;
+}
+
+.health-alert-content {
+  flex: 1;
+  text-align: center;
+}
+
+.health-alert-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 8px;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.health-alert-close:hover {
+  background: rgba(255, 255, 255, 0.4);
+  transform: scale(1.08);
 }
 
 /* ── Legend ── */
@@ -356,7 +424,7 @@ body.dark-mode .leaflet-tile-pane {
    ───────────────────────────────────────────────────────────────────────────── */
 #search-panel {
   position: absolute;
-  top: 14px;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
@@ -365,7 +433,9 @@ body.dark-mode .leaflet-tile-pane {
   gap: 6px;
   width: 92%;
   max-width: 680px;
+  padding: 0 4px;
   font-family: inherit;
+  pointer-events: auto;
 }
 
 .health-toolbar-row {
@@ -1605,15 +1675,105 @@ body.dark-mode .leaflet-tile-pane {
   .now-hero-card {
     padding: 22px 20px;
   }
-  #search-panel {
-    width: 95%;
-    top: 8px;
-  }
-  .search-row {
-    flex-wrap: wrap;
-  }
   .areas-table th, .areas-table td {
     padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 700px) {
+  #search-panel {
+    width: calc(100% - 20px);
+    max-width: 440px;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-height: calc(100% - 16px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 4px 12px 4px;
+    scrollbar-width: thin;
+    gap: 6px;
+  }
+
+  #search-panel::-webkit-scrollbar {
+    width: 5px;
+  }
+  #search-panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+  }
+
+  .health-toolbar-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .profile-selector-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .profile-selector-group select {
+    flex: 1;
+    max-width: 220px;
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  .toolbar-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 6px 10px;
+  }
+
+  .search-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .search-row .input-wrapper {
+    width: 100%;
+  }
+
+  .search-row input {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .search-row button,
+  .search-row select {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .suggestions-list {
+    max-height: 180px;
+  }
+
+  .routes-list {
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .route-item {
+    padding: 10px;
+  }
+
+  .health-alert-banner {
+    padding: 8px 12px;
     font-size: 12px;
   }
 }

@@ -58,104 +58,110 @@
   <!-- Error banner -->
   <div id="error-banner"></div>
 
-  <!-- Health Alert Banner (Phase 7 Profile Threshold Alert) -->
-  <div id="health-alert-banner" class="health-alert-banner" style="display: none;"></div>
-
   <!-- ════════════════════════════════════════════════════════════════════════════
        PAGE 1: LIVE MAP (#map)
        ════════════════════════════════════════════════════════════════════════════ -->
   <main id="view-map" class="page-view active">
-    <!-- Route Search Panel -->
-    <div id="search-panel">
-      <!-- Health Toolbar (Profile Selector & Saved Places Toggle) -->
-      <div class="health-toolbar-row">
-        <div class="profile-selector-group">
-          <label for="profile-select">👤 Profile:</label>
-          <select id="profile-select" title="Choose health profile for tailored threshold alerts">
-            <option value="healthy_adult">Healthy Adult (Threshold: 250)</option>
-            <option value="elderly">Elderly (Threshold: 150)</option>
-            <option value="asthma">Asthma (Threshold: 100)</option>
-            <option value="child">Child (Threshold: 100)</option>
-          </select>
-        </div>
-        <button id="toggle-saved-places-btn" class="toolbar-btn" type="button" title="View or manage saved places">
-          ⭐ Saved Places <span id="saved-places-badge" class="badge-count">0</span>
-        </button>
-      </div>
-
-      <!-- Saved Places Panel -->
-      <div id="saved-places-panel" class="saved-places-panel" style="display: none;">
-        <div class="saved-places-header">
-          <span><strong>⭐ Saved Places</strong></span>
-          <button id="add-saved-place-btn" type="button" class="btn-sm">+ Save Current Location</button>
-        </div>
-        <div id="saved-places-list" class="saved-places-list"></div>
-      </div>
-
-      <div class="search-row">
-        <div class="input-wrapper">
-          <input
-            type="text"
-            id="dest-input"
-            placeholder="Enter destination in Delhi NCR..."
-            autocomplete="off"
-          />
-          <!-- Autocomplete suggestions dropdown -->
-          <div id="dest-suggestions" class="suggestions-list" style="display: none;"></div>
-        </div>
-        <button id="search-btn" type="button">Search</button>
-        <button id="locate-btn" type="button" title="Use current GPS location as start point">
-          📍 Use my location
-        </button>
-        <button id="pick-dest-btn" type="button" title="Make the next map click set your destination">
-          🎯 Set dest on map
-        </button>
-        <select id="mode-select" title="Choose transport mode">
-          <option value="driving-car">🚗 Driving</option>
-          <option value="foot-walking">🚶 Walking</option>
-          <option value="cycling-regular">🚴 Cycling</option>
-        </select>
-      </div>
-
-      <!-- Status / hint text -->
-      <div id="search-status" class="search-status">
-        Start: Not set (click "Use my location" or click anywhere on the map)
-      </div>
-
-      <!-- Health Advice Panel -->
-      <div id="health-advice-panel" class="health-advice-panel">
-        <div class="advice-header">
-          <span id="advice-location-label" class="advice-location-title">📍 Area Health Advice</span>
-          <span id="advice-aqi-pill" class="advice-aqi-pill">--</span>
-        </div>
-        <div id="advice-message" class="advice-message">Checking local air quality…</div>
-      </div>
-
-      <!-- Route results list -->
-      <div id="route-options-card" class="route-options-card" style="display: none;">
-        <div class="route-options-header">
-          <span>Available Routes</span>
-          <button id="close-routes-btn" type="button" title="Clear routes">✕</button>
-        </div>
-        <div id="route-notice" class="route-notice" style="display: none;"></div>
-        <div id="routes-list" class="routes-list"></div>
-        <div id="route-hint" class="route-hint" style="display: none;" title="Cleanest = lowest total pollution exposure (AQI x time), not just lowest average AQI.">
-          Cleanest = lowest total pollution exposure (AQI x time), not just lowest average AQI.
-        </div>
-        <div id="route-comparison" class="route-comparison-text" style="display: none;"></div>
-
-        <!-- Leave-Time Suggestion Box -->
-        <div id="leave-time-box" class="leave-time-box" style="display: none;">
-          <div class="leave-time-header">
-            <span>⏱️ <strong>Best Time to Leave</strong></span>
-          </div>
-          <div id="leave-time-text" class="leave-time-text">Checking air quality forecast…</div>
-        </div>
-      </div>
+    <!-- Health Alert Banner (Directly under navbar, normal flow, pushes map down) -->
+    <div id="health-alert-banner" class="health-alert-banner" style="display: none;">
+      <div id="health-alert-content" class="health-alert-content"></div>
+      <button type="button" id="close-health-alert-btn" class="health-alert-close" aria-label="Dismiss health alert" title="Dismiss health alert">✕</button>
     </div>
 
-    <!-- Map container -->
-    <div id="map"></div>
+    <!-- Map Container (fills remaining screen height below banner) -->
+    <div id="map-container" class="map-container">
+      <!-- Route Search Panel (positioned inside map container) -->
+      <div id="search-panel">
+        <!-- Health Toolbar (Profile Selector & Saved Places Toggle) -->
+        <div class="health-toolbar-row">
+          <div class="profile-selector-group">
+            <label for="profile-select">👤 Profile:</label>
+            <select id="profile-select" title="Choose health profile for tailored threshold alerts">
+              <option value="healthy_adult">Healthy Adult (Threshold: 250)</option>
+              <option value="elderly">Elderly (Threshold: 150)</option>
+              <option value="asthma">Asthma (Threshold: 100)</option>
+              <option value="child">Child (Threshold: 100)</option>
+            </select>
+          </div>
+          <button id="toggle-saved-places-btn" class="toolbar-btn" type="button" title="View or manage saved places">
+            ⭐ Saved Places <span id="saved-places-badge" class="badge-count">0</span>
+          </button>
+        </div>
+
+        <!-- Saved Places Panel -->
+        <div id="saved-places-panel" class="saved-places-panel" style="display: none;">
+          <div class="saved-places-header">
+            <span><strong>⭐ Saved Places</strong></span>
+            <button id="add-saved-place-btn" type="button" class="btn-sm">+ Save Current Location</button>
+          </div>
+          <div id="saved-places-list" class="saved-places-list"></div>
+        </div>
+
+        <div class="search-row">
+          <div class="input-wrapper">
+            <input
+              type="text"
+              id="dest-input"
+              placeholder="Enter destination in Delhi NCR..."
+              autocomplete="off"
+            />
+            <!-- Autocomplete suggestions dropdown -->
+            <div id="dest-suggestions" class="suggestions-list" style="display: none;"></div>
+          </div>
+          <button id="search-btn" type="button">Search</button>
+          <button id="locate-btn" type="button" title="Use current GPS location as start point">
+            📍 Use my location
+          </button>
+          <button id="pick-dest-btn" type="button" title="Make the next map click set your destination">
+            🎯 Set dest on map
+          </button>
+          <select id="mode-select" title="Choose transport mode">
+            <option value="driving-car">🚗 Driving</option>
+            <option value="foot-walking">🚶 Walking</option>
+            <option value="cycling-regular">🚴 Cycling</option>
+          </select>
+        </div>
+
+        <!-- Status / hint text -->
+        <div id="search-status" class="search-status">
+          Start: Not set (click "Use my location" or click anywhere on the map)
+        </div>
+
+        <!-- Health Advice Panel -->
+        <div id="health-advice-panel" class="health-advice-panel">
+          <div class="advice-header">
+            <span id="advice-location-label" class="advice-location-title">📍 Area Health Advice</span>
+            <span id="advice-aqi-pill" class="advice-aqi-pill">--</span>
+          </div>
+          <div id="advice-message" class="advice-message">Checking local air quality…</div>
+        </div>
+
+        <!-- Route results list -->
+        <div id="route-options-card" class="route-options-card" style="display: none;">
+          <div class="route-options-header">
+            <span>Available Routes</span>
+            <button id="close-routes-btn" type="button" title="Clear routes">✕</button>
+          </div>
+          <div id="route-notice" class="route-notice" style="display: none;"></div>
+          <div id="routes-list" class="routes-list"></div>
+          <div id="route-hint" class="route-hint" style="display: none;" title="Cleanest = lowest total pollution exposure (AQI x time), not just lowest average AQI.">
+            Cleanest = lowest total pollution exposure (AQI x time), not just lowest average AQI.
+          </div>
+          <div id="route-comparison" class="route-comparison-text" style="display: none;"></div>
+
+          <!-- Leave-Time Suggestion Box -->
+          <div id="leave-time-box" class="leave-time-box" style="display: none;">
+            <div class="leave-time-header">
+              <span>⏱️ <strong>Best Time to Leave</strong></span>
+            </div>
+            <div id="leave-time-text" class="leave-time-text">Checking air quality forecast…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map element -->
+      <div id="map"></div>
+    </div>
   </main>
 
   <!-- ════════════════════════════════════════════════════════════════════════════
