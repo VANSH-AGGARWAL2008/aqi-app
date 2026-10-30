@@ -1,0 +1,13 @@
+# ─────────────────────────────────────────────
+# backend/.gitignore - Secrets & build artifacts
+# ─────────────────────────────────────────────
+
+.env
+*.env
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite3

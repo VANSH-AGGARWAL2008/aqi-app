@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delhi AQI Sentinel • Cleanest Route & Live Air Quality</title>
+
+  <!-- Content Security Policy (Hardened) -->
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000; font-src 'self';"
+  />
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <!-- Chart.js for 24-hour AQI Trend curve -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Our styles -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="dark-mode">
+
+  <!-- ── Top Navigation Bar ── -->
+  <header id="top-navbar" class="top-navbar">
+    <div class="nav-brand">
+      <span class="brand-logo">🌬️</span>
+      <div class="brand-text">
+        <span class="brand-title">Delhi AQI</span>
+        <span class="brand-subtitle">Sentinel</span>
+      </div>
+    </div>
+
+    <nav class="nav-links">
+      <a href="#map" id="nav-map" class="nav-link active" data-page="map">🗺️ Live Map</a>
+      <a href="#now" id="nav-now" class="nav-link" data-page="now">📊 Delhi AQI Now</a>
+      <a href="#areas" id="nav-areas" class="nav-link" data-page="areas">📋 Areas</a>
+      <a href="#guide" id="nav-guide" class="nav-link" data-page="guide">🩺 Health Guide</a>
+      <a href="#about" id="nav-about" class="nav-link" data-page="about">ℹ️ About</a>
+    </nav>
+
+    <div class="nav-actions">
+      <div id="live-indicator-pill" class="live-indicator-pill">
+        <span class="live-dot"></span>
+        <span id="live-stations-count">Live</span>
+      </div>
+      <button id="theme-toggle-btn" class="theme-toggle-btn" type="button" title="Toggle Light / Dark mode">
+        <span id="theme-icon">☀️</span>
+        <span id="theme-label" class="theme-label">Light</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Error banner -->
+  <div id="error-banner"></div>
+
+  <!-- Health Alert Banner (Phase 7 Profile Threshold Alert) -->
+  <div id="health-alert-banner" class="health-alert-banner" style="display: none;"></div>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════
+       PAGE 1: LIVE MAP (#map)
+       ════════════════════════════════════════════════════════════════════════════ -->
+  <main id="view-map" class="page-view active">
+    <!-- Route Search Panel -->
+    <div id="search-panel">
+      <!-- Health Toolbar (Profile Selector & Saved Places Toggle) -->
+      <div class="health-toolbar-row">
+        <div class="profile-selector-group">
+          <label for="profile-select">👤 Profile:</label>
+          <select id="profile-select" title="Choose health profile for tailored threshold alerts">
+            <option value="healthy_adult">Healthy Adult (Threshold: 250)</option>
+            <option value="elderly">Elderly (Threshold: 150)</option>
+            <option value="asthma">Asthma (Threshold: 100)</option>
+            <option value="child">Child (Threshold: 100)</option>
+          </select>
+        </div>
+        <button id="toggle-saved-places-btn" class="toolbar-btn" type="button" title="View or manage saved places">
+          ⭐ Saved Places <span id="saved-places-badge" class="badge-count">0</span>
+        </button>
+      </div>
+
+      <!-- Saved Places Panel -->
+      <div id="saved-places-panel" class="saved-places-panel" style="display: none;">
+        <div class="saved-places-header">
+          <span><strong>⭐ Saved Places</strong></span>
+          <button id="add-saved-place-btn" type="button" class="btn-sm">+ Save Current Location</button>
+        </div>
+        <div id="saved-places-list" class="saved-places-list"></div>
+      </div>
+
+      <div class="search-row">
+        <div class="input-wrapper">
+          <input
+            type="text"
+            id="dest-input"
+            placeholder="Enter destination in Delhi NCR..."
+            autocomplete="off"
+          />
+          <!-- Autocomplete suggestions dropdown -->
+          <div id="dest-suggestions" class="suggestions-list" style="display: none;"></div>
+        </div>
+        <button id="search-btn" type="button">Search</button>
+        <button id="locate-btn" type="button" title="Use current GPS location as start point">
+          📍 Use my location
+        </button>
+        <button id="pick-dest-btn" type="button" title="Make the next map click set your destination">
+          🎯 Set dest on map
+        </button>
+        <select id="mode-select" title="Choose transport mode">
+          <option value="driving-car">🚗 Driving</option>
+          <option value="foot-walking">🚶 Walking</option>
+          <option value="cycling-regular">🚴 Cycling</option>
+        </select>
+      </div>
+
+      <!-- Status / hint text -->
+      <div id="search-status" class="search-status">
+        Start: Not set (click "Use my location" or click anywhere on the map)
+      </div>
+
+      <!-- Health Advice Panel -->
+      <div id="health-advice-panel" class="health-advice-panel">
+        <div class="advice-header">
+          <span id="advice-location-label" class="advice-location-title">📍 Area Health Advice</span>
+          <span id="advice-aqi-pill" class="advice-aqi-pill">--</span>
+        </div>
+        <div id="advice-message" class="advice-message">Checking local air quality…</div>
+      </div>
+
+      <!-- Route results list -->
+      <div id="route-options-card" class="route-options-card" style="display: none;">
+        <div class="route-options-header">
+          <span>Available Routes</span>
+          <button id="close-routes-btn" type="button" title="Clear routes">✕</button>
+        </div>
+        <div id="route-notice" class="route-notice" style="display: none;"></div>
+        <div id="routes-list" class="routes-list"></div>
+        <div id="route-hint" class="route-hint" style="display: none;" title="Cleanest = lowest total pollution exposure (AQI x time), not just lowest average AQI.">
+          Cleanest = lowest total pollution exposure (AQI x time), not just lowest average AQI.
+        </div>
+        <div id="route-comparison" class="route-comparison-text" style="display: none;"></div>
+
+        <!-- Leave-Time Suggestion Box -->
+        <div id="leave-time-box" class="leave-time-box" style="display: none;">
+          <div class="leave-time-header">
+            <span>⏱️ <strong>Best Time to Leave</strong></span>
+          </div>
+          <div id="leave-time-text" class="leave-time-text">Checking air quality forecast…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map container -->
+    <div id="map"></div>
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════
+       PAGE 2: DELHI AQI NOW (#now)
+       ════════════════════════════════════════════════════════════════════════════ -->
+  <main id="view-now" class="page-view" style="display: none;">
+    <div class="page-container glass-container">
+      
+      <!-- Top location & timestamp bar -->
+      <div class="now-top-bar">
+        <div class="now-loc-tag">
+          <span class="loc-pin">📍</span>
+          <span class="loc-title">National Capital Region, Delhi</span>
+        </div>
+        <div id="now-updated-time" class="now-updated-time">Live Monitoring Active</div>
+      </div>
+
+      <!-- Hero Card (Glassmorphic) -->
+      <div class="now-hero-card">
+        <div class="hero-header-row">
+          <span class="hero-label">City-Wide Average Air Quality</span>
+          <span id="hero-date-badge" class="hero-date-badge">Today</span>
+        </div>
+
+        <div class="hero-main-row">
+          <div class="hero-aqi-group">
+            <span id="hero-aqi-value" class="hero-aqi-value">--</span>
+            <div class="hero-aqi-meta">
+              <span class="hero-scale-tag">US AQI</span>
+              <span id="hero-category-badge" class="hero-category-badge">Loading...</span>
+            </div>
+          </div>
+          <div class="hero-range-column">
+            <div class="hero-stat-pill">
+              <span class="pill-label">Lowest Station:</span>
+              <strong id="hero-min-station">--</strong>
+            </div>
+            <div class="hero-stat-pill">
+              <span class="pill-label">Highest Station:</span>
+              <strong id="hero-max-station">--</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-advice-box">
+          <span class="advice-spark">💡</span>
+          <p id="hero-advice-text" class="hero-advice-text">
+            Aggregating real-time sensors across Delhi NCR...
+          </p>
+        </div>
+
+        <div class="hero-action-row">
+          <button id="open-share-modal-btn" class="btn-hero primary-btn" type="button">
+            📸 Share Today's AQI
+          </button>
+          <a href="#map" class="btn-hero secondary-btn">
+            🗺️ Open Live Map
+          </a>
+        </div>
+      </div>
+
+      <!-- 24-Hour Trend Chart Card (Styled like uploaded image) -->
+      <div class="now-chart-card">
+        <div class="chart-header">
+          <div class="chart-title-group">
+            <span class="chart-icon">📈</span>
+            <div>
+              <h3 class="chart-heading">24-Hour Air Quality Trajectory</h3>
+              <p class="chart-subheading">Hourly US AQI forecast across Delhi NCR</p>
+            </div>
+          </div>
+          <span id="chart-status-pill" class="chart-status-pill">Hourly Forecast</span>
+        </div>
+        <div class="chart-canvas-wrapper">
+          <canvas id="trend-chart" height="95"></canvas>
+        </div>
+      </div>
+
+      <!-- Key Metrics Grid -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-icon-wrap">🟢</div>
+          <div class="metric-info">
+            <span class="metric-label">Cleanest Station</span>
+            <strong id="kpi-cleanest-name" class="metric-highlight">--</strong>
+            <span id="kpi-cleanest-aqi" class="metric-sub">AQI --</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon-wrap">🔴</div>
+          <div class="metric-info">
+            <span class="metric-label">Most Polluted</span>
+            <strong id="kpi-highest-name" class="metric-highlight">--</strong>
+            <span id="kpi-highest-aqi" class="metric-sub">AQI --</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon-wrap">📡</div>
+          <div class="metric-info">
+            <span class="metric-label">Stations Online</span>
+            <strong id="kpi-stations-count" class="metric-highlight">--</strong>
+            <span class="metric-sub">Active in NCR</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon-wrap">📍</div>
+          <div class="metric-info">
+            <span class="metric-label">Delhi Center AQI</span>
+            <strong id="kpi-center-aqi" class="metric-highlight">--</strong>
+            <span class="metric-sub">Connaught Place area</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════
+       PAGE 3: AREAS (#areas)
+       ════════════════════════════════════════════════════════════════════════════ -->
+  <main id="view-areas" class="page-view" style="display: none;">
+    <div class="page-container glass-container">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">📋 Delhi NCR Monitoring Stations</h2>
+          <p class="section-desc">Live air quality readings by monitoring station across Delhi NCR</p>
+        </div>
+        <div class="filter-controls">
+          <input
+            type="text"
+            id="areas-search-input"
+            class="areas-search-input"
+            placeholder="🔍 Filter by station or area name (e.g. Anand Vihar, IGI)..."
+          />
+        </div>
+      </div>
+
+      <div class="table-stats-bar">
+        <span id="areas-count-label">Loading stations…</span>
+        <span class="sort-hint">Click column header "AQI" to sort</span>
+      </div>
+
+      <div class="table-responsive-wrapper">
+        <table class="areas-table">
+          <thead>
+            <tr>
+              <th class="th-name">Station Name</th>
+              <th id="th-sort-aqi" class="th-aqi sortable">
+                AQI <span id="sort-aqi-arrow" class="sort-arrow">↕</span>
+              </th>
+              <th class="th-cat">Category</th>
+              <th class="th-time">Last Measured (IST)</th>
+              <th class="th-action">Action</th>
+            </tr>
+          </thead>
+          <tbody id="areas-table-body">
+            <tr>
+              <td colspan="5" class="table-loading-cell">Loading station records…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════
+       PAGE 4: HEALTH GUIDE (#guide)
+       ════════════════════════════════════════════════════════════════════════════ -->
+  <main id="view-guide" class="page-view" style="display: none;">
+    <div class="page-container glass-container">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">🩺 Air Quality & Health Guide</h2>
+          <p class="section-desc">US EPA Air Quality Index standards, category meanings, and recommended precautions</p>
+        </div>
+      </div>
+
+      <!-- AQI Bands Grid -->
+      <div class="guide-grid">
+        <div class="guide-card band-good">
+          <div class="guide-card-header">
+            <span class="guide-range-pill" style="background:#00e400;color:#111;">0 – 50</span>
+            <h3>Good</h3>
+          </div>
+          <p class="guide-advice-main">Air quality is good. Enjoy outdoor activities.</p>
+          <div class="guide-details">
+            <p><strong>General Public:</strong> Ideal air quality for all outdoor sports, running, and cycling.</p>
+            <p><strong>Sensitive Groups:</strong> No restrictions. Safe for children, elderly, and individuals with respiratory conditions.</p>
+            <p><strong>Ventilation:</strong> Great time to open windows and air out indoor spaces.</p>
+          </div>
+        </div>
+
+        <div class="guide-card band-moderate">
+          <div class="guide-card-header">
+            <span class="guide-range-pill" style="background:#ffff00;color:#111;">51 – 100</span>
+            <h3>Moderate</h3>
+          </div>
+          <p class="guide-advice-main">Air quality is acceptable. Unusually sensitive people should consider reducing prolonged outdoor exertion.</p>
+          <div class="guide-details">
+            <p><strong>General Public:</strong> Normal outdoor activity is generally safe.</p>
+            <p><strong>Sensitive Groups:</strong> Individuals with severe asthma should monitor for mild symptoms during prolonged exertion.</p>
+            <p><strong>Ventilation:</strong> Windows can remain open under moderate conditions.</p>
+          </div>
+        </div>
+
+        <div class="guide-card band-sensitive">
+          <div class="guide-card-header">
+            <span class="guide-range-pill" style="background:#ff7e00;color:#fff;">101 – 150</span>
+            <h3>Unhealthy for Sensitive Groups</h3>
+          </div>
+          <p class="guide-advice-main">Sensitive groups should reduce prolonged outdoor exertion.</p>
+          <div class="guide-details">
+            <p><strong>General Public:</strong> Most adults will not experience immediate acute effects.</p>
+            <p><strong>Sensitive Groups:</strong> Children, the elderly, and people with lung/heart disease should limit strenuous outdoor play or exercise.</p>
+            <p><strong>Ventilation:</strong> Keep windows closed near heavy traffic corridors.</p>
+          </div>
+        </div>
+
+        <div class="guide-card band-unhealthy">
+          <div class="guide-card-header">
+            <span class="guide-range-pill" style="background:#ff0000;color:#fff;">151 – 200</span>
+            <h3>Unhealthy</h3>
+          </div>
+          <p class="guide-advice-main">Everyone should reduce prolonged outdoor exertion. Consider a mask outdoors.</p>
+          <div class="guide-details">
+            <p><strong>General Public:</strong> Noticeable throat irritation or coughing may occur during intense exertion. Wear a well-fitted N95 mask outdoors.</p>
+            <p><strong>Sensitive Groups:</strong> Avoid prolonged outdoor activities completely. Stay indoors in air-filtered spaces.</p>
+            <p><strong>Ventilation:</strong> Keep windows closed; run HEPA air purifiers if available.</p>
+          </div>
+        </div>
+
+        <div class="guide-card band-very-unhealthy">
+          <div class="guide-card-header">
+            <span class="guide-range-pill" style="background:#8f3f97;color:#fff;">201 – 300</span>
+            <h3>Very Unhealthy</h3>
+          </div>
+          <p class="guide-advice-main">Avoid outdoor exertion. Wear an N95 mask if you must go outside.</p>
+          <div class="guide-details">
+            <p><strong>General Public:</strong> Significant risk of respiratory symptoms for the entire population. Move workouts indoors.</p>
+            <p><strong>Sensitive Groups:</strong> Remain indoors. Keep quick-relief medications readily accessible.</p>
+            <p><strong>Ventilation:</strong> Seal window gaps; avoid burning incense or candles indoors.</p>
+          </div>
+        </div>
+
+        <div class="guide-card band-hazardous">
+          <div class="guide-card-header">
+            <span class="guide-range-pill" style="background:#7e0023;color:#fff;">301+</span>
+            <h3>Hazardous</h3>
+          </div>
+          <p class="guide-advice-main">Hazardous. Stay indoors with windows closed. Avoid all outdoor activity.</p>
+          <div class="guide-details">
+            <p><strong>General Public:</strong> Health warning of emergency conditions. Everyone is likely to be affected.</p>
+            <p><strong>Sensitive Groups:</strong> Severe risk of exacerbation of heart or lung diseases. Minimize any physical exertion.</p>
+            <p><strong>Ventilation:</strong> Keep all doors/windows sealed. Use HEPA filtration continuously.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Health Profile Guide -->
+      <div class="profile-guide-section">
+        <h3 class="subsection-title">👤 Tailored Health Alert Thresholds</h3>
+        <p class="subsection-desc">Delhi AQI Sentinel lets you select a profile on the Live Map to receive proactive warnings along your travel routes:</p>
+        <div class="profile-cards-grid">
+          <div class="profile-card">
+            <h4>Asthma & Respiratory</h4>
+            <span class="profile-threshold-badge">Alert at AQI 100</span>
+            <p>Fine particles (PM2.5) trigger airway inflammation quickly. Alerts trigger whenever route points enter the Unhealthy for Sensitive Groups band.</p>
+          </div>
+          <div class="profile-card">
+            <h4>Children</h4>
+            <span class="profile-threshold-badge">Alert at AQI 100</span>
+            <p>Children breathe faster relative to body mass and their lungs are developing. Alert warns against prolonged sports when AQI crosses 100.</p>
+          </div>
+          <div class="profile-card">
+            <h4>Elderly</h4>
+            <span class="profile-threshold-badge">Alert at AQI 150</span>
+            <p>Cardiovascular strain rises markedly in older adults above AQI 150. Proactively alerts before prolonged exposure occurs.</p>
+          </div>
+          <div class="profile-card">
+            <h4>Healthy Adult</h4>
+            <span class="profile-threshold-badge">Alert at AQI 250</span>
+            <p>High exertion in Very Unhealthy air poses systemic oxidative stress. Warns when exposure along a route approaches hazardous levels.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════
+       PAGE 5: ABOUT (#about)
+       ════════════════════════════════════════════════════════════════════════════ -->
+  <main id="view-about" class="page-view" style="display: none;">
+    <div class="page-container glass-container">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">ℹ️ About Delhi AQI Sentinel</h2>
+          <p class="section-desc">Real-time air quality mapping and pollution-minimized route optimization</p>
+        </div>
+      </div>
+
+      <div class="about-cards-container">
+        <div class="about-card">
+          <div class="about-card-icon">🗺️</div>
+          <div class="about-card-content">
+            <h3>Continuous Spatial Interpolation (IDW)</h3>
+            <p>
+              Most air quality services display static sensor readings at a handful of government monitoring stations. If you live 5 km away from the nearest station, that number is only a rough guess. Delhi AQI Sentinel integrates all continuous ambient stations across Delhi NCR in real time and calculates an Inverse Distance Weighting (IDW) spatial estimate. This generates a smooth, hyper-local continuous air quality field so you can inspect estimated pollution at any street, park, or landmark.
+            </p>
+          </div>
+        </div>
+
+        <div class="about-card">
+          <div class="about-card-icon">🧭</div>
+          <div class="about-card-content">
+            <h3>Pollution-Aware Route Intelligence</h3>
+            <p>
+              Traditional GPS apps navigate strictly for travel duration or distance. However, in heavily polluted metropolitan environments, taking a major congested highway can expose you to significantly higher pollution than a slightly longer, greener bypass. Delhi AQI Sentinel computes the true <strong>total exposure</strong> along every alternative route:
+            </p>
+            <div class="math-callout">
+              Total Exposure = Σ (AQI at sampled point × Segment duration in minutes) × Breathing Exertion Factor
+            </div>
+            <p>
+              Because pedestrians and cyclists inhale substantially more air per minute than motorists inside a vehicle cabin, physical exertion multipliers (<strong>2.5× for Walking, 2.2× for Cycling, 1.0× for Driving</strong>) ensure route comparisons reflect genuine physiological lung burden.
+            </p>
+          </div>
+        </div>
+
+        <div class="about-card">
+          <div class="about-card-icon">🔒</div>
+          <div class="about-card-content">
+            <h3>Privacy-First & High-Performance Proxy</h3>
+            <p>
+              The application runs with a dedicated local FastAPI proxy backend that caches station readings server-side for 10 minutes and applies Token Bucket rate-limiting (1 req/sec per IP) to guard upstream quotas. No personal location data, search history, or saved places ever leave your browser, providing lightning-fast navigation with complete privacy.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="about-credits-box">
+        <p><strong>Data Sources:</strong> World Air Quality Index (WAQI / CPCC / DPCC), Open-Meteo Air Quality Forecast, OpenRouteService, and OpenStreetMap.</p>
+        <p><strong>Built for:</strong> The residents, commuters, and athletes of the National Capital Region of Delhi.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════
+       SHARE MODAL (Canvas Image Generator)
+       ════════════════════════════════════════════════════════════════════════════ -->
+  <div id="share-modal" class="share-modal" style="display: none;">
+    <div id="share-backdrop" class="share-modal-backdrop"></div>
+    <div class="share-modal-dialog">
+      <div class="share-modal-header">
+        <h3>📸 Share Today's Delhi AQI</h3>
+        <button id="close-share-modal-btn" class="close-btn" type="button" title="Close">✕</button>
+      </div>
+      <div class="share-modal-body">
+        <div class="canvas-preview-wrapper">
+          <canvas id="share-canvas" width="800" height="800"></canvas>
+        </div>
+      </div>
+      <div class="share-modal-footer">
+        <button id="download-share-img-btn" class="btn-primary" type="button">⬇️ Download Image (PNG)</button>
+        <button id="copy-share-img-btn" class="btn-secondary" type="button">📋 Copy Image</button>
+      </div>
+      <div id="share-status-msg" class="share-status-msg"></div>
+    </div>
+  </div>
+
+  <!-- ── Site Global Footer Credits & Disclaimer ── -->
+  <footer id="site-footer" class="site-footer">
+    <div class="footer-inner">
+      <p class="footer-credits">Data: WAQI/aqicn.org, OpenAQ, OpenStreetMap contributors, Open-Meteo</p>
+      <p class="footer-disclaimer">Estimated values, not an official government source.</p>
+    </div>
+  </footer>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- App logic (No config.js needed; all requests mediated via backend proxy) -->
+  <script src="app.js"></script>
+
+</body>
+</html>

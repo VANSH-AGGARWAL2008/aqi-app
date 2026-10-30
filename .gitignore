@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────
+# Root .gitignore - Prevent secrets & build files from leaking
+# ─────────────────────────────────────────────
+
+# Secrets & Environment configs
+.env
+*.env
+backend/.env
+config.js
+
+# Python virtual environment
+venv/
+backend/venv/
+.venv/
+env/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Databases & local storage
+*.db
+*.sqlite3
+backend/*.db
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
