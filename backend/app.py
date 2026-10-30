@@ -1,4 +1,7 @@
+import logging
 import os
+from pathlib import Path
+import sqlite3
 import time
 from collections import defaultdict
 from typing import List, Optional
@@ -7,7 +10,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 import requests
+
+logger = logging.getLogger("uvicorn.error")
 
 # Load secrets from backend/.env
 load_dotenv()
@@ -15,6 +21,67 @@ load_dotenv()
 WAQI_TOKEN = os.getenv("WAQI_TOKEN", "")
 ORS_KEY = os.getenv("ORS_KEY", "")
 OPENAQ_KEY = os.getenv("OPENAQ_KEY", "")
+
+# SQLite history database path
+DB_PATH = Path(__file__).resolve().parent / "aqi_history.db"
+
+def init_history_db():
+    """Initializes the SQLite history database safely without crashing on permission errors."""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS readings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    station_id TEXT,
+                    name TEXT,
+                    lat REAL,
+                    lon REAL,
+                    pm25 REAL,
+                    pm10 REAL,
+                    aqi REAL,
+                    timestamp_utc TEXT
+                )
+            """)
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"Could not initialize SQLite database ({DB_PATH}): {e}. Continuing without crash.")
+
+# Initialize table on module load safely
+init_history_db()
+
+def safe_record_history(stations: list):
+    """Safely saves station readings into SQLite history. If file cannot be written, logs and carries on."""
+    if not stations:
+        return
+    try:
+        now_ts = int(time.time())
+        now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now_ts))
+        ten_mins_ago_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now_ts - 600))
+
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            for s in stations:
+                st_id = str(s.get("uid", ""))
+                st_name = s.get("station", {}).get("name", "") if isinstance(s.get("station"), dict) else str(s.get("name", ""))
+                lat = s.get("lat")
+                lon = s.get("lon")
+                aqi = s.get("aqi")
+
+                # Avoid duplicate rows for the same station within 10 minutes
+                cursor.execute(
+                    "SELECT id FROM readings WHERE station_id = ? AND timestamp_utc >= ? LIMIT 1",
+                    (st_id, ten_mins_ago_iso)
+                )
+                if not cursor.fetchone():
+                    cursor.execute(
+                        "INSERT INTO readings (station_id, name, lat, lon, pm25, pm10, aqi, timestamp_utc) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (st_id, st_name, lat, lon, None, None, aqi, now_iso)
+                    )
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"Could not write to SQLite history file ({DB_PATH}): {e}. Carrying on gracefully.")
 
 # Delhi NCR geographic bounding box
 DELHI_BOUNDS = {
@@ -172,6 +239,7 @@ def get_stations(bounds: Optional[str] = "28.40,76.84,28.88,77.35"):
             if data.get("status") == "ok" and len(data.get("data", [])) >= 5:
                 STATIONS_CACHE["data"] = data
                 STATIONS_CACHE["timestamp"] = now
+                safe_record_history(data.get("data", []))
                 return JSONResponse(content=data, headers={"X-Cache": "MISS"})
 
         # Fallback to OpenAQ if WAQI returned insufficient data and OPENAQ_KEY exists
@@ -207,6 +275,7 @@ def get_stations(bounds: Optional[str] = "28.40,76.84,28.88,77.35"):
                     fallback_data = {"status": "ok", "data": converted, "source": "openaq"}
                     STATIONS_CACHE["data"] = fallback_data
                     STATIONS_CACHE["timestamp"] = now
+                    safe_record_history(converted)
                     return JSONResponse(content=fallback_data, headers={"X-Cache": "FALLBACK_OPENAQ"})
 
         # If WAQI returned an error but we have stale cache, serve stale cache
@@ -412,13 +481,52 @@ def get_forecast(lat: float = 28.6139, lng: float = 77.2090):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 9. ROOT HEALTH CHECK
+# 9. API HEALTH & HISTORY COUNT ENDPOINTS
 # ─────────────────────────────────────────────────────────────────────────────
-@app.get("/")
-def root():
+@app.get("/api/health")
+def api_health():
     return {
         "status": "ok",
         "service": "Delhi AQI Public Secure API",
         "rate_limit": "30 requests/minute per IP",
         "cache_duration_minutes": 10
     }
+
+@app.get("/api/history/count")
+def get_history_count():
+    """Returns how many station readings are stored in SQLite history; fails gracefully if db unavailable."""
+    try:
+        if not DB_PATH.exists():
+            return {"count": 0}
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT count(*) FROM readings")
+            row = cursor.fetchone()
+            return {"count": row[0] if row else 0}
+    except Exception as e:
+        logger.warning(f"Could not read SQLite history count: {e}")
+        return {"count": 0, "status": "unavailable", "message": "Database write/read unavailable"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. STATIC FRONTEND SERVING
+# ─────────────────────────────────────────────────────────────────────────────
+# Serve frontend/ as static files at "/" with html=True so index.html is served automatically.
+# Mounted AFTER all /api routes so API endpoints take priority.
+# Only the frontend/ folder is public: backend/, .env, .db, .git are never exposed.
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+if FRONTEND_DIR.exists() and FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+else:
+    logger.warning(f"Frontend directory not found at {FRONTEND_DIR}. Only API endpoints available.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 11. MAIN ENTRYPOINT (Reads PORT from environment)
+# ─────────────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    import uvicorn
+    # Read PORT from environment variable (Render, Railway, Heroku default injection)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)

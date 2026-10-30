@@ -4,11 +4,11 @@
 // ─────────────────────────────────────────────
 
 // ── Backend URL Configuration ────────────────────────────────────────────────
-// Automatically connects to local backend when running on localhost/127.0.0.1;
-// otherwise uses the deployed production backend placeholder URL.
-const API_BASE = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+// If opened on port 5500 (Live Server during local development), use "http://localhost:8000".
+// Otherwise, use "" (same server, relative URLs like /api/stations).
+const API_BASE = (window.location.port === "5500")
   ? "http://localhost:8000"
-  : "https://aqi-app.onrender.com";
+  : "";
 
 
 // ── IDW tuning constants ──────────────────────────────────────────────────────
