@@ -20,6 +20,15 @@
   <!-- Chart.js for 24-hour AQI Trend curve -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+  <!-- PWA Manifest & Mobile Icons -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0b1329" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Delhi AQI" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+
   <!-- Our styles -->
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -55,12 +64,22 @@
         <span class="live-dot"></span>
         <span id="live-stations-count">Live</span>
       </div>
+      <button id="pwa-install-btn" class="pwa-install-btn" type="button" style="display: none;" title="Install Delhi AQI Sentinel to home screen">
+        <span class="install-icon">📲</span>
+        <span class="install-label">Install</span>
+      </button>
       <button id="theme-toggle-btn" class="theme-toggle-btn" type="button" title="Toggle Light / Dark mode">
         <span id="theme-icon">☀️</span>
         <span id="theme-label" class="theme-label">Light</span>
       </button>
     </div>
   </header>
+
+  <!-- PWA Offline Status Banner (Honest Stale Data Guard) -->
+  <div id="offline-status-banner" class="offline-status-banner" style="display: none;">
+    <span class="offline-dot"></span>
+    <span id="offline-banner-text">📡 <strong>Offline mode:</strong> Showing cached readings from <span id="offline-data-age">just now</span>. Real-time updates paused.</span>
+  </div>
 
   <!-- Error banner -->
   <div id="error-banner"></div>

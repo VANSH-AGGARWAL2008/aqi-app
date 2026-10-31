@@ -1720,7 +1720,7 @@ body.dark-mode .leaflet-tile-pane {
    ───────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .top-navbar {
-    padding: 0 12px;
+    padding: 0 10px;
   }
   .brand-title {
     font-size: 13.5px;
@@ -1728,9 +1728,20 @@ body.dark-mode .leaflet-tile-pane {
   .brand-subtitle {
     display: none;
   }
+  .nav-links {
+    overflow-x: auto;
+    max-width: 46vw;
+    white-space: nowrap;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav-links::-webkit-scrollbar {
+    display: none;
+  }
   .nav-link {
     padding: 5px 8px;
     font-size: 11px;
+    flex-shrink: 0;
   }
   .hero-aqi-value {
     font-size: 56px;
@@ -1741,6 +1752,29 @@ body.dark-mode .leaflet-tile-pane {
   .areas-table th, .areas-table td {
     padding: 8px 10px;
     font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .top-navbar {
+    padding: 0 6px;
+    height: 50px;
+  }
+  .nav-actions {
+    gap: 4px;
+  }
+  .scale-toggle-btn {
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+  .live-indicator-pill {
+    display: none;
+  }
+  .theme-toggle-btn {
+    padding: 4px 6px;
+  }
+  .theme-label {
+    display: none;
   }
 }
 
@@ -2103,4 +2137,67 @@ body.dark-mode .leaflet-tile-pane {
   text-align: center;
   margin-top: 16px;
   padding: 0 8px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   FEATURE 8: PWA & OFFLINE STALE-DATA GUARD
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Offline Status Banner */
+.offline-status-banner {
+  background: linear-gradient(90deg, #d97706, #b45309);
+  color: #ffffff;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  z-index: 1050;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  animation: fadeInDown 0.3s ease;
+}
+
+.offline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fef08a;
+  box-shadow: 0 0 8px #fef08a;
+  display: inline-block;
+  animation: pulse-dot 1.5s infinite;
+  flex-shrink: 0;
+}
+
+/* PWA Install Button in Header */
+.pwa-install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+}
+
+.pwa-install-btn:hover {
+  background: linear-gradient(135deg, #0369a1, #075985);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(2, 132, 199, 0.4);
+}
+
+@media (max-width: 600px) {
+  .pwa-install-btn {
+    padding: 5px 9px;
+    font-size: 11px;
+  }
 }

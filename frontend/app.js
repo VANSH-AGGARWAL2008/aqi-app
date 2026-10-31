@@ -981,12 +981,43 @@ function fetchWaqiStations() {
       totalStationsCount = stations.length;
       skippedStationsCount = skippedCount;
 
+      // PWA: Cache station dataset in localStorage for offline resilience
+      try {
+        localStorage.setItem("delhi_aqi_station_cache_v1", JSON.stringify({
+          timestamp: lastStationFetchTimestamp.getTime(),
+          data: validList,
+          totalCount: stations.length,
+          skippedCount: skippedCount
+        }));
+      } catch (cacheErr) {}
+
+      hideOfflineBanner();
       console.log("WAQI stations returned: " + stations.length + ", valid: " + validList.length);
       applyStationsToMap(validList, stations.length, skippedCount);
       updateRelativeTimeLabels();
     })
     .catch(function (err) {
       console.warn("WAQI fetch error:", err);
+
+      // PWA Offline Guard: If network is unavailable or server is unreachable,
+      // load last cached station data and display an honest "Offline" label
+      var cached = null;
+      try {
+        var rawCache = localStorage.getItem("delhi_aqi_station_cache_v1");
+        if (rawCache) cached = JSON.parse(rawCache);
+      } catch (e) {}
+
+      if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
+        console.log("[PWA] Using offline cached station data (" + cached.data.length + " stations).");
+        lastStationFetchTimestamp = new Date(cached.timestamp || Date.now());
+        totalStationsCount = cached.totalCount || cached.data.length;
+        skippedStationsCount = cached.skippedCount || 0;
+        applyStationsToMap(cached.data, totalStationsCount, skippedStationsCount);
+        showOfflineBanner(lastStationFetchTimestamp);
+        hideError();
+        return;
+      }
+
       if (err.message && err.message.indexOf("RATE_LIMIT") !== -1) {
         showError("⚠️ Too many requests, please try again in a minute.");
       } else if (err.message && err.message.indexOf("Failed to fetch") !== -1) {
@@ -996,6 +1027,34 @@ function fetchWaqiStations() {
       }
     });
 }
+
+// ── PWA Offline Banner Helpers ────────────────────────────────────────────────
+function showOfflineBanner(date) {
+  var banner = document.getElementById("offline-status-banner");
+  var ageEl = document.getElementById("offline-data-age");
+  if (!banner) return;
+  if (ageEl) {
+    ageEl.textContent = getUpdatedTimeAgoString(date);
+  }
+  banner.style.display = "flex";
+}
+
+function hideOfflineBanner() {
+  var banner = document.getElementById("offline-status-banner");
+  if (banner) banner.style.display = "none";
+}
+
+// Online / Offline Connectivity Listeners
+window.addEventListener("online", function () {
+  console.log("[Network] Connection restored, re-fetching live data…");
+  hideOfflineBanner();
+  fetchWaqiStations();
+});
+
+window.addEventListener("offline", function () {
+  console.log("[Network] Connection lost, switching to offline mode…");
+  showOfflineBanner(lastStationFetchTimestamp);
+});
 
 // Initial fetch and auto-refresh every 10 minutes
 fetchWaqiStations();
@@ -3541,16 +3600,25 @@ function runCommuteRoute() {
   if (resultsEl) resultsEl.style.display = "none";
   if (errorEl) errorEl.style.display = "none";
 
-  // Build ORS route request (3 alternatives) — same URL format as calculateRoutes()
-  var routeUrl = ROUTE_API_URL
-    + "?start_lng=" + homePlace.lng.toFixed(6)
-    + "&start_lat=" + homePlace.lat.toFixed(6)
-    + "&end_lng=" + workPlace.lng.toFixed(6)
-    + "&end_lat=" + workPlace.lat.toFixed(6)
-    + "&mode=" + encodeURIComponent(mode)
-    + "&alternatives=true";
+  // Build ORS route request with alternatives
+  var bodyPayload = {
+    mode: mode,
+    coordinates: [
+      [homePlace.lng, homePlace.lat],
+      [workPlace.lng, workPlace.lat]
+    ],
+    alternative_routes: {
+      target_count: 3,
+      share_factor: 0.6,
+      weight_factor: 1.6
+    }
+  };
 
-  fetch(routeUrl)
+  fetch(ROUTE_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(bodyPayload)
+  })
     .then(function (res) {
       if (res.status === 429) throw new Error("RATE_LIMIT");
       if (!res.ok) throw new Error("HTTP " + res.status);
@@ -3817,6 +3885,60 @@ if (commuteModeSelect) {
 PAGE_VIEWS["commute"] = document.getElementById("view-commute");
 
 switchPage(window.location.hash || "map");
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 8: PWA SERVICE WORKER REGISTRATION & INSTALL PROMPT
+// ══════════════════════════════════════════════════════════════════════════════
+
+// 1. Register Service Worker for offline caching & PWA compliance
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then(function (registration) {
+        console.log("[PWA] Service Worker active with scope:", registration.scope);
+      })
+      .catch(function (error) {
+        console.warn("[PWA] Service Worker registration failed:", error);
+      });
+  });
+}
+
+// 2. Handle beforeinstallprompt for one-tap home screen installation
+var deferredInstallPrompt = null;
+var pwaInstallBtn = document.getElementById("pwa-install-btn");
+
+window.addEventListener("beforeinstallprompt", function (event) {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  if (pwaInstallBtn) {
+    pwaInstallBtn.style.display = "inline-flex";
+  }
+  console.log("[PWA] Install prompt captured and ready.");
+});
+
+if (pwaInstallBtn) {
+  pwaInstallBtn.addEventListener("click", function () {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.then(function (choiceResult) {
+        if (choiceResult.outcome === "accepted") {
+          console.log("[PWA] User accepted installation prompt.");
+        } else {
+          console.log("[PWA] User dismissed installation prompt.");
+        }
+        deferredInstallPrompt = null;
+        pwaInstallBtn.style.display = "none";
+      });
+    }
+  });
+}
+
+window.addEventListener("appinstalled", function () {
+  console.log("[PWA] Delhi AQI Sentinel was successfully installed.");
+  if (pwaInstallBtn) pwaInstallBtn.style.display = "none";
+});
+
 
 
 

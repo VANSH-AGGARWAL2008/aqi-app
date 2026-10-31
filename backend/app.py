@@ -361,24 +361,55 @@ ALLOWED_MODES = {
     "cycling": "cycling-regular"
 }
 
-@app.post("/api/route")
-def get_route(payload: dict):
+@app.api_route("/api/route", methods=["GET", "POST"])
+async def get_route(
+    request: Request,
+    start_lat: Optional[float] = None,
+    start_lng: Optional[float] = None,
+    end_lat: Optional[float] = None,
+    end_lng: Optional[float] = None,
+    mode: Optional[str] = "driving-car",
+    alternatives: Optional[bool] = True
+):
     if not ORS_KEY:
         raise HTTPException(
             status_code=500,
             detail="ORS_KEY not configured in backend/.env"
         )
 
-    # 1. Validate transport mode
+    # 1. Parse payload from POST body or GET query params
+    if request.method == "POST":
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON body.")
+    else:
+        if start_lat is None or start_lng is None or end_lat is None or end_lng is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing query params for GET /api/route. Required: start_lat, start_lng, end_lat, end_lng."
+            )
+        payload = {
+            "mode": mode,
+            "coordinates": [[start_lng, start_lat], [end_lng, end_lat]]
+        }
+        if alternatives:
+            payload["alternative_routes"] = {
+                "target_count": 3,
+                "share_factor": 0.6,
+                "weight_factor": 1.6
+            }
+
+    # 2. Validate transport mode
     raw_mode = payload.get("mode", "driving-car")
     if raw_mode not in ALLOWED_MODES:
         raise HTTPException(
             status_code=400,
             detail="Invalid mode. Must be one of: driving-car, foot-walking, cycling-regular (or driving, walking, cycling)."
         )
-    mode = ALLOWED_MODES[raw_mode]
+    clean_mode = ALLOWED_MODES[raw_mode]
 
-    # 2. Validate coordinates payload
+    # 3. Validate coordinates payload
     coordinates = payload.get("coordinates")
     if not coordinates or not isinstance(coordinates, list) or len(coordinates) < 2:
         raise HTTPException(
@@ -386,7 +417,7 @@ def get_route(payload: dict):
             detail="Invalid coordinates. Expected at least 2 coordinate points: [[lon, lat], [lon, lat]]."
         )
 
-    # 3. Validate every coordinate is strictly within Delhi NCR bounds
+    # 4. Validate every coordinate is strictly within Delhi NCR bounds
     for pt in coordinates:
         if not isinstance(pt, (list, tuple)) or len(pt) < 2:
             raise HTTPException(status_code=400, detail="Invalid coordinate pair. Expected [lon, lat].")
@@ -402,7 +433,7 @@ def get_route(payload: dict):
                 detail=f"Coordinate point ({pt_lat}, {pt_lon}) lies outside Delhi NCR bounds (lat 28.20 to 29.00, lon 76.70 to 77.60)."
             )
 
-    url = f"https://api.openrouteservice.org/v2/directions/{mode}/geojson"
+    url = f"https://api.openrouteservice.org/v2/directions/{clean_mode}/geojson"
     headers = {
         "Authorization": ORS_KEY,
         "Content-Type": "application/json"
@@ -455,14 +486,25 @@ def get_forecast(lat: float = 28.6139, lng: float = 77.2090):
         if now - cached_time < CACHE_DURATION_SECONDS:
             return JSONResponse(content=cached_data, headers={"X-Cache": "HIT"})
 
-    url = (
+    # 1. Fetch Air Quality (PM2.5, PM10, US AQI)
+    aq_url = (
         f"https://air-quality-api.open-meteo.com/v1/air-quality"
         f"?latitude={lat:.4f}&longitude={lng:.4f}"
-        f"&hourly=us_aqi,pm2_5&timezone=auto&forecast_days=2"
+        f"&hourly=us_aqi,pm2_5,pm10&timezone=auto&forecast_days=2"
+    )
+
+    # 2. Fetch Surface Meteorology (Wind Speed, Direction, Temperature, Humidity)
+    # Essential for Feature 3 (Pollution Pulse) & Feature 4 (Healthy Home Helper)
+    weather_url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat:.4f}&longitude={lng:.4f}"
+        f"&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m"
+        f"&hourly=temperature_2m,wind_speed_10m,wind_direction_10m"
+        f"&timezone=auto&forecast_days=2"
     )
 
     try:
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(aq_url, timeout=10)
         if resp.status_code != 200:
             raise HTTPException(
                 status_code=resp.status_code,
@@ -470,6 +512,19 @@ def get_forecast(lat: float = 28.6139, lng: float = 77.2090):
             )
 
         data = resp.json()
+
+        # Gracefully enrich with meteorological data if available
+        try:
+            w_resp = requests.get(weather_url, timeout=6)
+            if w_resp.status_code == 200:
+                w_data = w_resp.json()
+                data["current_weather"] = w_data.get("current", {})
+                data["hourly_weather"] = w_data.get("hourly", {})
+        except Exception as w_err:
+            print(f"[Forecast] Optional weather enrichment skipped: {w_err}")
+            data["current_weather"] = {}
+            data["hourly_weather"] = {}
+
         FORECAST_CACHE[cache_key] = (now, data)
         return JSONResponse(content=data, headers={"X-Cache": "MISS"})
 
