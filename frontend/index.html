@@ -39,6 +39,7 @@
       <a href="#map" id="nav-map" class="nav-link active" data-page="map">🗺️ Live Map</a>
       <a href="#now" id="nav-now" class="nav-link" data-page="now">📊 Delhi AQI Now</a>
       <a href="#areas" id="nav-areas" class="nav-link" data-page="areas">📋 Areas</a>
+      <a href="#commute" id="nav-commute" class="nav-link" data-page="commute">🚌 Commute</a>
       <a href="#guide" id="nav-guide" class="nav-link" data-page="guide">🩺 Health Guide</a>
       <a href="#about" id="nav-about" class="nav-link" data-page="about">ℹ️ About</a>
     </nav>
@@ -288,6 +289,109 @@
         </div>
       </div>
 
+    </div>
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════
+       PAGE 6: COMMUTE PLANNER (#commute)
+       One-tap home→work route with cleanest path, exposure diff, and best departure time.
+       Reuses Saved Places (reads places named "Home" and "Work").
+       ════════════════════════════════════════════════════════════════════════════ -->
+  <main id="view-commute" class="page-view" style="display: none;">
+    <div class="page-container glass-container">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">🚌 Commute Planner</h2>
+          <p class="section-desc">One-tap cleanest route between your saved Home and Work — no search needed</p>
+        </div>
+      </div>
+
+      <!-- Setup prompt shown when Home/Work are not yet saved -->
+      <div id="commute-setup-prompt" class="commute-setup-prompt" style="display: none;">
+        <div class="commute-setup-icon">🏠 🏢</div>
+        <h3>Save Home &amp; Work first</h3>
+        <p>Go to the <strong>Live Map</strong>, use <em>Saved Places</em> to save a location named <strong>Home</strong> and another named <strong>Work</strong> (or <strong>Office</strong>). Then come back here for one-tap commute planning.</p>
+        <a href="#map" class="btn-primary" onclick="switchPage('map'); return false;">Go to Live Map →</a>
+      </div>
+
+      <!-- Main commute card shown when Home + Work exist -->
+      <div id="commute-card" class="commute-card" style="display: none;">
+
+        <!-- Header row: home → work with live AQI pills -->
+        <div class="commute-endpoints">
+          <div class="commute-endpoint">
+            <span class="commute-ep-icon">🏠</span>
+            <div class="commute-ep-info">
+              <span class="commute-ep-label">Home</span>
+              <strong id="commute-home-name">--</strong>
+            </div>
+            <span id="commute-home-aqi" class="commute-aqi-pill">--</span>
+          </div>
+          <div class="commute-arrow">→</div>
+          <div class="commute-endpoint">
+            <span class="commute-ep-icon">🏢</span>
+            <div class="commute-ep-info">
+              <span class="commute-ep-label">Work</span>
+              <strong id="commute-work-name">--</strong>
+            </div>
+            <span id="commute-work-aqi" class="commute-aqi-pill">--</span>
+          </div>
+        </div>
+
+        <!-- Mode selector -->
+        <div class="commute-mode-row">
+          <label for="commute-mode-select">🚗 Mode:</label>
+          <select id="commute-mode-select" class="commute-mode-select">
+            <option value="driving-car">🚗 Driving</option>
+            <option value="foot-walking">🚶 Walking</option>
+            <option value="cycling-regular">🚴 Cycling</option>
+          </select>
+          <button id="commute-refresh-btn" class="btn-primary commute-refresh-btn" type="button">🔄 Check Route Now</button>
+        </div>
+
+        <!-- Loading state -->
+        <div id="commute-loading" class="commute-loading" style="display: none;">
+          <span class="spinner"></span> Fetching cleanest route…
+        </div>
+
+        <!-- Results section -->
+        <div id="commute-results" style="display: none;">
+
+          <!-- Cleanest route summary -->
+          <div class="commute-result-row">
+            <div class="commute-result-card commute-cleanest">
+              <div class="commute-result-label">✅ Cleanest Route</div>
+              <div id="commute-cleanest-stats" class="commute-stats-line">--</div>
+              <div id="commute-cleanest-exposure" class="commute-exposure-line">Exposure: --</div>
+            </div>
+            <div class="commute-result-card commute-fastest">
+              <div class="commute-result-label">⚡ Fastest Route</div>
+              <div id="commute-fastest-stats" class="commute-stats-line">--</div>
+              <div id="commute-fastest-exposure" class="commute-exposure-line">Exposure: --</div>
+            </div>
+          </div>
+
+          <!-- Exposure difference callout -->
+          <div id="commute-exposure-diff" class="commute-exposure-diff" style="display: none;"></div>
+
+          <!-- Best departure time (reuses fetchLeaveTimeSuggestion logic) -->
+          <div id="commute-leave-time" class="commute-leave-time" style="display: none;">
+            <div class="leave-time-header">⏱️ <strong>Best Time to Leave</strong></div>
+            <div id="commute-leave-time-text" class="leave-time-text">Checking forecast…</div>
+          </div>
+
+          <!-- View on Map button -->
+          <div class="commute-map-link-row">
+            <button id="commute-view-map-btn" class="btn-secondary" type="button">🗺️ View on Live Map</button>
+          </div>
+        </div>
+
+        <!-- Error message -->
+        <div id="commute-error" class="commute-error" style="display: none;"></div>
+      </div>
+
+      <!-- Footer note -->
+      <p class="commute-footer-note">💡 Tip: The Cleanest route minimises total AQI × time exposure, not just average AQI. Breathing exertion is factored in for walking and cycling.</p>
     </div>
   </main>
 

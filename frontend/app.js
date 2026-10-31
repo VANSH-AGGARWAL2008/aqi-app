@@ -2888,6 +2888,8 @@ function switchPage(pageKey) {
     renderTrendChart();
   } else if (targetKey === "areas") {
     renderAreasTable();
+  } else if (targetKey === "commute") {
+    renderCommutePage();
   }
 
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -3432,7 +3434,388 @@ if (scaleBtnIndia && scaleBtnUs) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 1: COMMUTE PLANNER
+// ══════════════════════════════════════════════════════════════════════════════
+// One-tap card that:
+//   1. Reads "Home" and "Work" (or "Office") from Saved Places
+//   2. Fetches the cleanest + fastest routes via the existing /api/route proxy
+//   3. Scores each route with scoreRoutePollution() (reused from Phase 4)
+//   4. Shows exposure difference between cleanest vs fastest
+//   5. Fetches Open-Meteo forecast to suggest the best departure time in 3 hours
+//      (reuses the same getForecastAqi / getTripExposure logic as fetchLeaveTimeSuggestion)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// The last computed commute routes; used when "View on Live Map" is clicked
+var lastCommuteRouteData = null;
+
+/**
+ * renderCommutePage()
+ * Called every time the #commute page becomes visible.
+ * Looks up saved Home + Work, populates AQI pills, then runs the route fetch.
+ */
+function renderCommutePage() {
+  var setupPrompt = document.getElementById("commute-setup-prompt");
+  var commuteCard = document.getElementById("commute-card");
+  var resultsEl = document.getElementById("commute-results");
+  var errorEl = document.getElementById("commute-error");
+  var loadingEl = document.getElementById("commute-loading");
+
+  // Find Home and Work in saved places (case-insensitive match)
+  var places = getSavedPlaces();
+  var homePlace = places.find(function (p) {
+    return /^home$/i.test(p.name.trim());
+  });
+  var workPlace = places.find(function (p) {
+    return /^(work|office)$/i.test(p.name.trim());
+  });
+
+  // If either is missing, show the setup guide and hide the card
+  if (!homePlace || !workPlace) {
+    if (setupPrompt) setupPrompt.style.display = "block";
+    if (commuteCard) commuteCard.style.display = "none";
+    return;
+  }
+
+  // Both found — show the card
+  if (setupPrompt) setupPrompt.style.display = "none";
+  if (commuteCard) commuteCard.style.display = "block";
+  if (resultsEl) resultsEl.style.display = "none";
+  if (errorEl) errorEl.style.display = "none";
+  if (loadingEl) loadingEl.style.display = "none";
+
+  // Populate endpoint labels
+  var homeNameEl = document.getElementById("commute-home-name");
+  var workNameEl = document.getElementById("commute-work-name");
+  if (homeNameEl) homeNameEl.textContent = homePlace.name;
+  if (workNameEl) workNameEl.textContent = workPlace.name;
+
+  // Show live AQI pills for Home and Work using IDW
+  updateCommuteAqiPills(homePlace, workPlace);
+}
+
+/**
+ * updateCommuteAqiPills(homePlace, workPlace)
+ * Shows the current AQI estimate at each endpoint using IDW interpolation.
+ */
+function updateCommuteAqiPills(homePlace, workPlace) {
+  function setPill(elId, lat, lng) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    if (!currentValidStations || currentValidStations.length === 0) {
+      el.textContent = "--";
+      el.style.background = "#888";
+      return;
+    }
+    var aqi = Math.round(computeIdw(lat, lng, currentValidStations));
+    var color = getAqiColor(aqi, currentAqiScale);
+    el.textContent = "AQI " + aqi;
+    el.style.background = color;
+    el.style.color = getHealthAdvice(aqi, currentAqiScale).textColor;
+  }
+  setPill("commute-home-aqi", homePlace.lat, homePlace.lng);
+  setPill("commute-work-aqi", workPlace.lat, workPlace.lng);
+}
+
+/**
+ * runCommuteRoute()
+ * Fetches up to 3 alternative routes from Home → Work, scores each one,
+ * identifies the cleanest and fastest, then shows results.
+ * Also calls the leave-time suggestion logic.
+ */
+function runCommuteRoute() {
+  var places = getSavedPlaces();
+  var homePlace = places.find(function (p) { return /^home$/i.test(p.name.trim()); });
+  var workPlace = places.find(function (p) { return /^(work|office)$/i.test(p.name.trim()); });
+  if (!homePlace || !workPlace) return;
+
+  var modeSelect = document.getElementById("commute-mode-select");
+  var mode = modeSelect ? modeSelect.value : "driving-car";
+
+  var loadingEl = document.getElementById("commute-loading");
+  var resultsEl = document.getElementById("commute-results");
+  var errorEl = document.getElementById("commute-error");
+
+  // Show loading state
+  if (loadingEl) loadingEl.style.display = "flex";
+  if (resultsEl) resultsEl.style.display = "none";
+  if (errorEl) errorEl.style.display = "none";
+
+  // Build ORS route request (3 alternatives) — same URL format as calculateRoutes()
+  var routeUrl = ROUTE_API_URL
+    + "?start_lng=" + homePlace.lng.toFixed(6)
+    + "&start_lat=" + homePlace.lat.toFixed(6)
+    + "&end_lng=" + workPlace.lng.toFixed(6)
+    + "&end_lat=" + workPlace.lat.toFixed(6)
+    + "&mode=" + encodeURIComponent(mode)
+    + "&alternatives=true";
+
+  fetch(routeUrl)
+    .then(function (res) {
+      if (res.status === 429) throw new Error("RATE_LIMIT");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(function (geojson) {
+      if (!geojson || !geojson.features || geojson.features.length === 0) {
+        throw new Error("No routes returned");
+      }
+
+      // Parse each route into { latlngs, distanceKm, durationMin }
+      var routes = geojson.features.map(function (feat, idx) {
+        var coords = feat.geometry.coordinates;
+        var latlngs = coords.map(function (c) { return [c[1], c[0]]; });
+        var summary = feat.properties.summary || {};
+        var distMeters = summary.distance || 0;
+        var durSec = summary.duration || 0;
+        return {
+          index: idx,
+          latlngs: latlngs,
+          distanceKm: parseFloat((distMeters / 1000).toFixed(1)),
+          durationMin: Math.round(durSec / 60),
+          feature: feat
+        };
+      });
+
+      // Score each route for pollution exposure
+      routes.forEach(function (r) {
+        var score = scoreRoutePollution(r.latlngs, r.durationMin, currentValidStations, mode);
+        r.avgAqi = score.avgAqi;
+        r.exposure = score.exposure;
+        r.breathingFactor = score.breathingFactor;
+      });
+
+      // Identify cleanest (lowest exposure) and fastest (lowest duration)
+      var cleanest = routes.reduce(function (best, r) {
+        return r.exposure < best.exposure ? r : best;
+      }, routes[0]);
+      var fastest = routes.reduce(function (best, r) {
+        return r.durationMin < best.durationMin ? r : best;
+      }, routes[0]);
+
+      lastCommuteRouteData = { cleanest: cleanest, fastest: fastest, home: homePlace, work: workPlace, mode: mode };
+
+      if (loadingEl) loadingEl.style.display = "none";
+      showCommuteResults(cleanest, fastest, homePlace, workPlace, mode);
+    })
+    .catch(function (err) {
+      if (loadingEl) loadingEl.style.display = "none";
+      if (errorEl) {
+        var msg = err.message === "RATE_LIMIT"
+          ? "⚠️ Too many requests. Please wait a minute and try again."
+          : "❌ Could not fetch route: " + escapeHtml(err.message);
+        errorEl.textContent = msg;
+        errorEl.style.display = "block";
+      }
+    });
+}
+
+/**
+ * showCommuteResults(cleanest, fastest, homePlace, workPlace, mode)
+ * Populates the result cards with route data and triggers the leave-time suggestion.
+ */
+function showCommuteResults(cleanest, fastest, homePlace, workPlace, mode) {
+  var resultsEl = document.getElementById("commute-results");
+  var cleanestStatsEl = document.getElementById("commute-cleanest-stats");
+  var cleanestExpEl = document.getElementById("commute-cleanest-exposure");
+  var fastestStatsEl = document.getElementById("commute-fastest-stats");
+  var fastestExpEl = document.getElementById("commute-fastest-exposure");
+  var diffEl = document.getElementById("commute-exposure-diff");
+
+  if (!resultsEl) return;
+
+  // Cleanest route card
+  if (cleanestStatsEl) {
+    cleanestStatsEl.textContent = cleanest.distanceKm + " km · " + cleanest.durationMin + " min · Avg AQI " + cleanest.avgAqi;
+  }
+  if (cleanestExpEl) {
+    cleanestExpEl.textContent = "Exposure score: " + cleanest.exposure +
+      (cleanest.breathingFactor !== 1 ? " (" + cleanest.breathingFactor + "× breathing)" : "");
+  }
+
+  // Fastest route card
+  if (fastestStatsEl) {
+    fastestStatsEl.textContent = fastest.distanceKm + " km · " + fastest.durationMin + " min · Avg AQI " + fastest.avgAqi;
+  }
+  if (fastestExpEl) {
+    fastestExpEl.textContent = "Exposure score: " + fastest.exposure;
+  }
+
+  // Exposure difference callout
+  if (diffEl) {
+    if (cleanest.index !== fastest.index && fastest.exposure > 0) {
+      var pctSaved = Math.round(((fastest.exposure - cleanest.exposure) / fastest.exposure) * 100);
+      if (pctSaved > 0) {
+        diffEl.innerHTML =
+          "🌿 Taking the <strong>Cleanest route</strong> saves ~<strong>" + pctSaved + "%</strong> less pollution exposure " +
+          "vs the fastest route (" + cleanest.exposure + " vs " + fastest.exposure + " exposure units).";
+        diffEl.style.display = "block";
+      } else if (pctSaved < 0) {
+        diffEl.innerHTML = "ℹ️ The fastest route is already the cleanest for this trip.";
+        diffEl.style.display = "block";
+      } else {
+        diffEl.style.display = "none";
+      }
+    } else {
+      diffEl.innerHTML = "ℹ️ Only one distinct route found — this is both the cleanest and fastest option.";
+      diffEl.style.display = "block";
+    }
+  }
+
+  resultsEl.style.display = "block";
+
+  // Trigger leave-time suggestion for the cleanest route, anchored at Home
+  fetchCommuteLeaveTime(homePlace.lat, homePlace.lng, cleanest);
+}
+
+/**
+ * fetchCommuteLeaveTime(lat, lng, route)
+ * Fetches the Open-Meteo forecast and suggests the best departure time
+ * in the next 3 hours for the cleanest commute route.
+ * Mirrors the logic in fetchLeaveTimeSuggestion() but writes to the commute card's elements.
+ */
+function fetchCommuteLeaveTime(lat, lng, route) {
+  var box = document.getElementById("commute-leave-time");
+  var textEl = document.getElementById("commute-leave-time-text");
+  if (!box || !textEl) return;
+
+  box.style.display = "block";
+  textEl.textContent = "Checking air quality forecast…";
+
+  var url = FORECAST_API_URL + "?lat=" + lat.toFixed(4) + "&lng=" + lng.toFixed(4);
+
+  fetch(url)
+    .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+    .then(function (data) {
+      if (!data || !data.hourly || !data.hourly.time || !data.hourly.us_aqi) {
+        box.style.display = "none";
+        return;
+      }
+
+      var times = data.hourly.time;
+      var aqis = data.hourly.us_aqi;
+      var pm25s = data.hourly.pm2_5 || [];
+
+      // Build a flat array of { timeMs, aqi } for linear interpolation
+      var entries = [];
+      for (var i = 0; i < times.length; i++) {
+        var t = new Date(times[i]).getTime();
+        var val = aqis[i];
+        if (val === null || val === undefined || isNaN(val)) {
+          val = (pm25s[i] !== null && pm25s[i] !== undefined) ? Math.round(pm25s[i] * 2.5) : null;
+        }
+        if (!isNaN(t) && val !== null) entries.push({ timeMs: t, aqi: val });
+      }
+
+      if (entries.length < 2) { box.style.display = "none"; return; }
+
+      // Linear interpolation at any timestamp
+      function getForecastAqi(ms) {
+        if (ms <= entries[0].timeMs) return entries[0].aqi;
+        if (ms >= entries[entries.length - 1].timeMs) return entries[entries.length - 1].aqi;
+        for (var j = 0; j < entries.length - 1; j++) {
+          if (ms >= entries[j].timeMs && ms <= entries[j + 1].timeMs) {
+            var frac = (ms - entries[j].timeMs) / (entries[j + 1].timeMs - entries[j].timeMs);
+            return entries[j].aqi + frac * (entries[j + 1].aqi - entries[j].aqi);
+          }
+        }
+        return entries[entries.length - 1].aqi;
+      }
+
+      // Average AQI over the trip duration starting at a given ms
+      function getTripAvg(startMs, durationMin) {
+        var stepMs = 5 * 60 * 1000;
+        var durMs = (durationMin || 30) * 60 * 1000;
+        var sum = 0; var count = 0;
+        for (var cur = startMs; cur <= startMs + durMs; cur += stepMs) {
+          sum += getForecastAqi(cur); count++;
+        }
+        return count > 0 ? sum / count : getForecastAqi(startMs);
+      }
+
+      var nowMs = Date.now();
+      var nowAvg = getTripAvg(nowMs, route.durationMin);
+
+      // Check 30/60/90/120/180 minute delays (same as main leave-time logic)
+      var candidates = [30, 60, 90, 120, 180];
+      var best = null;
+      var maxReductionPct = 0;
+
+      candidates.forEach(function (delay) {
+        var startMs = nowMs + delay * 60 * 1000;
+        var avg = getTripAvg(startMs, route.durationMin);
+        if (nowAvg > 0) {
+          var pct = Math.round(((nowAvg - avg) / nowAvg) * 100);
+          if (pct > maxReductionPct) {
+            maxReductionPct = pct;
+            best = { delayMin: delay, startMs: startMs, pct: pct, avg: Math.round(avg) };
+          }
+        }
+      });
+
+      // Display suggestion
+      if (best && best.pct >= 15) {
+        var timeStr = new Date(best.startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        textEl.innerHTML =
+          "<strong>Leave at " + timeStr + "</strong> instead of now — ~" + best.pct + "% less exposure.<br>" +
+          "<span style='font-size:0.85em;color:var(--text-secondary)'>Waiting " + best.delayMin + " min for avg AQI to drop to ~" + best.avg + " on your " + route.durationMin + " min commute.</span>";
+      } else {
+        textEl.innerHTML =
+          "<strong>Now is a good time to leave.</strong><br>" +
+          "<span style='font-size:0.85em;color:var(--text-secondary)'>Air quality is forecast to stay steady or worsen over the next 3 hours.</span>";
+      }
+    })
+    .catch(function (err) {
+      console.warn("Commute forecast error (silent):", err);
+      box.style.display = "none";
+    });
+}
+
+// ── Wire up Commute page buttons ──────────────────────────────────────────────
+
+// "Check Route Now" button
+var commuteRefreshBtn = document.getElementById("commute-refresh-btn");
+if (commuteRefreshBtn) {
+  commuteRefreshBtn.addEventListener("click", function () {
+    runCommuteRoute();
+  });
+}
+
+// "View on Live Map" button — sets Home as start, Work as destination, and switches to Live Map
+var commuteViewMapBtn = document.getElementById("commute-view-map-btn");
+if (commuteViewMapBtn) {
+  commuteViewMapBtn.addEventListener("click", function () {
+    if (!lastCommuteRouteData) return;
+    var home = lastCommuteRouteData.home;
+    var work = lastCommuteRouteData.work;
+    // Set mode on Live Map to match commute selection
+    var modeSelect = document.getElementById("mode-select");
+    if (modeSelect && lastCommuteRouteData.mode) modeSelect.value = lastCommuteRouteData.mode;
+    // Switch page first, then set points after map is ready
+    switchPage("map");
+    setTimeout(function () {
+      setStartPoint(home.lat, home.lng, home.name);
+      setDestPoint(work.lat, work.lng, work.name);
+    }, 200);
+  });
+}
+
+// ── Auto-run route when page is opened and mode changes ───────────────────────
+var commuteModeSelect = document.getElementById("commute-mode-select");
+if (commuteModeSelect) {
+  commuteModeSelect.addEventListener("change", function () {
+    // Only auto-run if results are already showing (don't run on first open)
+    var resultsEl = document.getElementById("commute-results");
+    if (resultsEl && resultsEl.style.display !== "none") {
+      runCommuteRoute();
+    }
+  });
+}
+
 // ── Initial Router Bootstrap ─────────────────────────────────────────────────
+// Register the commute page in the router BEFORE first switchPage call
+PAGE_VIEWS["commute"] = document.getElementById("view-commute");
+
 switchPage(window.location.hash || "map");
 
 

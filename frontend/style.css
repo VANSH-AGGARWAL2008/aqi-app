@@ -1873,3 +1873,234 @@ body.dark-mode .leaflet-tile-pane {
   color: var(--text-muted);
   font-style: italic;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   FEATURE 1: COMMUTE PLANNER (#commute page)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Setup prompt shown when Home/Work not yet saved */
+.commute-setup-prompt {
+  text-align: center;
+  padding: 40px 24px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  margin: 24px 0;
+}
+.commute-setup-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+  letter-spacing: 8px;
+}
+.commute-setup-prompt h3 {
+  margin: 0 0 10px;
+  font-size: 1.2rem;
+  color: var(--text-primary);
+}
+.commute-setup-prompt p {
+  color: var(--text-secondary);
+  margin: 0 0 20px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+/* Main commute card */
+.commute-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px;
+  margin: 12px 0;
+}
+
+/* Home → Work endpoints row */
+.commute-endpoints {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.commute-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 140px;
+}
+.commute-ep-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+.commute-ep-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.commute-ep-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.commute-ep-info strong {
+  font-size: 0.92rem;
+  color: var(--text-primary);
+}
+.commute-arrow {
+  font-size: 1.4rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.commute-aqi-pill {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: #888;
+  color: #fff;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+/* Mode selector row */
+.commute-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.commute-mode-row label {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.commute-mode-select {
+  flex: 1;
+  min-width: 140px;
+  max-width: 200px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+}
+.commute-refresh-btn {
+  padding: 7px 16px;
+  font-size: 0.88rem;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+/* Loading spinner */
+.commute-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Results: two-column cards */
+.commute-result-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+@media (max-width: 500px) {
+  .commute-result-row { grid-template-columns: 1fr; }
+}
+
+.commute-result-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+.commute-cleanest {
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.07);
+}
+.commute-fastest {
+  border-color: var(--border-color);
+  background: var(--card-bg);
+}
+.commute-result-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.commute-stats-line {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.commute-exposure-line {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+/* Exposure difference callout */
+.commute-exposure-diff {
+  background: rgba(59, 130, 246, 0.09);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+/* Leave time card (reusing leave-time-box styles + this wrapper) */
+.commute-leave-time {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+
+/* Map link row */
+.commute-map-link-row {
+  text-align: center;
+  margin-top: 8px;
+}
+
+/* Error message */
+.commute-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 0.88rem;
+  color: #ef4444;
+}
+
+/* Footer tip */
+.commute-footer-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 16px;
+  padding: 0 8px;
+}
