@@ -44,6 +44,12 @@
     </nav>
 
     <div class="nav-actions">
+      <!-- Scale Switcher (India AQI | US AQI, default India) -->
+      <div class="scale-toggle-group" id="scale-toggle-group" title="Toggle AQI Standard">
+        <button type="button" id="scale-btn-india" class="scale-toggle-btn active" data-scale="india">India AQI</button>
+        <button type="button" id="scale-btn-us" class="scale-toggle-btn" data-scale="us">US AQI</button>
+      </div>
+
       <div id="live-indicator-pill" class="live-indicator-pill">
         <span class="live-dot"></span>
         <span id="live-stations-count">Live</span>
@@ -161,6 +167,9 @@
 
       <!-- Map element -->
       <div id="map"></div>
+
+      <!-- Live Map Data Updated Pill -->
+      <div id="map-data-updated-badge" class="map-data-updated-badge">Data updated just now</div>
     </div>
   </main>
 
@@ -190,7 +199,7 @@
           <div class="hero-aqi-group">
             <span id="hero-aqi-value" class="hero-aqi-value">--</span>
             <div class="hero-aqi-meta">
-              <span class="hero-scale-tag">US AQI</span>
+              <span id="hero-scale-tag" class="hero-scale-tag">India NAQI</span>
               <span id="hero-category-badge" class="hero-category-badge">Loading...</span>
             </div>
           </div>
@@ -471,7 +480,7 @@
           <div class="about-card-content">
             <h3>Continuous Spatial Interpolation (IDW)</h3>
             <p>
-              Most air quality services display static sensor readings at a handful of government monitoring stations. If you live 5 km away from the nearest station, that number is only a rough guess. Delhi AQI Sentinel integrates all continuous ambient stations across Delhi NCR in real time and calculates an Inverse Distance Weighting (IDW) spatial estimate. This generates a smooth, hyper-local continuous air quality field so you can inspect estimated pollution at any street, park, or landmark.
+              Most air quality services display static sensor readings at a handful of government monitoring stations. If you live 5 km away from the nearest station, that number is only a rough guess. Delhi AQI Sentinel integrates all continuous ambient stations across Delhi NCR in real time and calculates an Inverse Distance Weighting (IDW) spatial estimate. This generates a smooth, estimated between stations continuous air quality field so you can inspect estimated pollution at any street, park, or landmark.
             </p>
           </div>
         </div>
@@ -497,14 +506,14 @@
           <div class="about-card-content">
             <h3>Privacy-First & High-Performance Proxy</h3>
             <p>
-              The application runs with a dedicated local FastAPI proxy backend that caches station readings server-side for 10 minutes and applies Token Bucket rate-limiting (1 req/sec per IP) to guard upstream quotas. No personal location data, search history, or saved places ever leave your browser, providing lightning-fast navigation with complete privacy.
+              The application runs with a dedicated FastAPI proxy backend that caches station readings server-side for 10 minutes and applies Token Bucket rate-limiting (1 req/sec per IP) to guard upstream quotas. Your saved places stay in your browser. Route requests pass through our server to fetch directions, and we don't store them.
             </p>
           </div>
         </div>
       </div>
 
       <div class="about-credits-box">
-        <p><strong>Data Sources:</strong> World Air Quality Index (WAQI / CPCC / DPCC), Open-Meteo Air Quality Forecast, OpenRouteService, and OpenStreetMap.</p>
+        <p><strong>Data Sources:</strong> World Air Quality Index (WAQI (aqicn.org)), Open-Meteo Air Quality Forecast, OpenRouteService, and OpenStreetMap.</p>
         <p><strong>Built for:</strong> The residents, commuters, and athletes of the National Capital Region of Delhi.</p>
       </div>
     </div>
@@ -536,7 +545,7 @@
   <!-- ── Site Global Footer Credits & Disclaimer ── -->
   <footer id="site-footer" class="site-footer">
     <div class="footer-inner">
-      <p class="footer-credits">Data: WAQI/aqicn.org, OpenAQ, OpenStreetMap contributors, Open-Meteo</p>
+      <p class="footer-credits">Data: WAQI (aqicn.org), OpenAQ, OpenStreetMap contributors, Open-Meteo</p>
       <p class="footer-disclaimer">Estimated values, not an official government source.</p>
     </div>
   </footer>

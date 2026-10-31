@@ -27,35 +27,187 @@ var IDW_MIN_STATIONS  = 3;
 var KM_PER_DEG = 111;
 
 
-// ── 1. AQI Color & Category Helpers (US EPA Standard) ────────────────────────
-// US EPA AQI categories:
-//   0-50   Good (green)
-//   51-100 Moderate (yellow)
-//   101-150 Unhealthy for Sensitive Groups (orange)
-//   151-200 Unhealthy (red)
-//   201-300 Very Unhealthy (purple)
-//   301+   Hazardous (maroon)
-function getAqiColor(aqi) {
+// ── 1. AQI Scales: India NAQI (CPCB) & US EPA Standards ──────────────────────
+
+// Active AQI scale: "india" (default) or "us"
+// Stored in localStorage so user preference persists across reloads
+var currentAqiScale = "india";
+try {
+  var storedScale = localStorage.getItem("preferred_aqi_scale");
+  if (storedScale === "us" || storedScale === "india") {
+    currentAqiScale = storedScale;
+  }
+} catch (e) {}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INDIA NATIONAL AIR QUALITY INDEX (NAQI) CONFIGURATION & BREAKPOINTS (CPCB)
+// ══════════════════════════════════════════════════════════════════════════════
+// Official standard established by Central Pollution Control Board (CPCB),
+// Ministry of Environment, Forest & Climate Change, Government of India.
+//
+// Categories & AQI Bands:
+//   Good:           0 – 50    (Green #00b050)
+//   Satisfactory:  51 – 100   (Light Green #92d050)
+//   Moderate:     101 – 200   (Yellow #eab308)
+//   Poor:         201 – 300   (Orange #ff9900)
+//   Very Poor:    301 – 400   (Red #ff0000)
+//   Severe:       401 – 500   (Purple #7030a0)
+//
+// Breakpoint tables for 24-hour concentration averages in µg/m³:
+var INDIA_NAQI_CONFIG = {
+  categories: [
+    { min: 0,   max: 50,  label: "Good",         color: "#00b050", textColor: "#ffffff" },
+    { min: 51,  max: 100, label: "Satisfactory", color: "#92d050", textColor: "#111111" },
+    { min: 101, max: 200, label: "Moderate",     color: "#eab308", textColor: "#111111" },
+    { min: 201, max: 300, label: "Poor",         color: "#ff9900", textColor: "#ffffff" },
+    { min: 301, max: 400, label: "Very Poor",    color: "#ff0000", textColor: "#ffffff" },
+    { min: 401, max: 500, label: "Severe",       color: "#7030a0", textColor: "#ffffff" }
+  ],
+  breakpoints: {
+    // PM2.5 breakpoints (µg/m³) -> AQI sub-index range
+    pm25: [
+      { bLo: 0,   bHi: 30,  iLo: 0,   iHi: 50 },
+      { bLo: 31,  bHi: 60,  iLo: 51,  iHi: 100 },
+      { bLo: 61,  bHi: 90,  iLo: 101, iHi: 200 },
+      { bLo: 91,  bHi: 120, iLo: 201, iHi: 300 },
+      { bLo: 121, bHi: 250, iLo: 301, iHi: 400 },
+      { bLo: 251, bHi: 500, iLo: 401, iHi: 500 }
+    ],
+    // PM10 breakpoints (µg/m³) -> AQI sub-index range
+    pm10: [
+      { bLo: 0,   bHi: 50,  iLo: 0,   iHi: 50 },
+      { bLo: 51,  bHi: 100, iLo: 51,  iHi: 100 },
+      { bLo: 101, bHi: 250, iLo: 101, iHi: 200 },
+      { bLo: 251, bHi: 350, iLo: 201, iHi: 300 },
+      { bLo: 351, bHi: 430, iLo: 301, iHi: 400 },
+      { bLo: 431, bHi: 600, iLo: 401, iHi: 500 }
+    ]
+  }
+};
+
+// Sub-index linear interpolation formula:
+// Ip = [ (I_hi - I_lo) / (B_hi - B_lo) ] * (Cp - B_lo) + I_lo
+function calcSubIndex(concentration, breakpoints) {
+  if (concentration === null || concentration === undefined || isNaN(concentration) || concentration < 0) {
+    return null;
+  }
+  for (var i = 0; i < breakpoints.length; i++) {
+    var bp = breakpoints[i];
+    if (concentration >= bp.bLo && concentration <= bp.bHi) {
+      var sub = ((bp.iHi - bp.iLo) / (bp.bHi - bp.bLo)) * (concentration - bp.bLo) + bp.iLo;
+      return Math.round(sub);
+    }
+  }
+  // When concentration exceeds top boundary, clamp to top sub-index (500)
+  var last = breakpoints[breakpoints.length - 1];
+  if (concentration > last.bHi) {
+    return last.iHi;
+  }
+  return null;
+}
+
+// Compute India NAQI as maximum of PM2.5 and PM10 sub-indices
+function computeIndiaNaqi(pm25, pm10) {
+  var sub25 = calcSubIndex(pm25, INDIA_NAQI_CONFIG.breakpoints.pm25);
+  var sub10 = calcSubIndex(pm10, INDIA_NAQI_CONFIG.breakpoints.pm10);
+
+  if (sub25 !== null && sub10 !== null) {
+    return Math.max(sub25, sub10);
+  }
+  if (sub25 !== null) return sub25;
+  if (sub10 !== null) return sub10;
+  return null;
+}
+
+// Determine station AQI according to active scale, with automatic US fallback
+function getStationAqi(station, scale) {
+  scale = scale || currentAqiScale || "india";
+  var usAqi = (station.usAqi !== undefined && station.usAqi !== null)
+    ? station.usAqi
+    : ((station.aqi !== undefined && station.aqi !== null) ? station.aqi : 0);
+
+  if (scale === "india") {
+    var pm25 = (station.pm25 !== undefined && station.pm25 !== null && !isNaN(station.pm25)) ? Number(station.pm25) : null;
+    var pm10 = (station.pm10 !== undefined && station.pm10 !== null && !isNaN(station.pm10)) ? Number(station.pm10) : null;
+
+    var indNaqi = computeIndiaNaqi(pm25, pm10);
+    if (indNaqi !== null) {
+      return {
+        value: indNaqi,
+        scale: "india",
+        isFallback: false,
+        label: getAqiLabel(indNaqi, "india"),
+        color: getAqiColor(indNaqi, "india")
+      };
+    }
+
+    // Credibility requirement: If PM values are missing for a station,
+    // fall back to the US scale for that station and label it.
+    return {
+      value: usAqi,
+      scale: "us",
+      isFallback: true,
+      label: getAqiLabel(usAqi, "us"),
+      color: getAqiColor(usAqi, "us")
+    };
+  }
+
+  // Scale is US EPA
+  return {
+    value: usAqi,
+    scale: "us",
+    isFallback: false,
+    label: getAqiLabel(usAqi, "us"),
+    color: getAqiColor(usAqi, "us")
+  };
+}
+
+// Color coding according to standard
+function getAqiColor(aqi, scale) {
+  scale = scale || currentAqiScale || "india";
+
+  if (scale === "india") {
+    if (aqi <= 50)  return "#00b050"; // Good          – green
+    if (aqi <= 100) return "#92d050"; // Satisfactory  – light green
+    if (aqi <= 200) return "#eab308"; // Moderate      – yellow/amber
+    if (aqi <= 300) return "#ff9900"; // Poor          – orange
+    if (aqi <= 400) return "#ff0000"; // Very Poor     – red
+    return                 "#7030a0"; // Severe        – purple
+  }
+
+  // US EPA AQI categories
   if (aqi <= 50)  return "#00e400"; // Good          – green
   if (aqi <= 100) return "#ffff00"; // Moderate      – yellow
   if (aqi <= 150) return "#ff7e00"; // Unhealthy/Sens– orange
   if (aqi <= 200) return "#ff0000"; // Unhealthy     – red
   if (aqi <= 300) return "#8f3f97"; // Very Unhealthy– purple
-  return           "#7e0023";       // Hazardous     – maroon
+  return                 "#7e0023"; // Hazardous     – maroon
 }
 
-// Returns a human-readable label for the US EPA AQI value
-function getAqiLabel(aqi) {
+// Category text labels
+function getAqiLabel(aqi, scale) {
+  scale = scale || currentAqiScale || "india";
+
+  if (scale === "india") {
+    if (aqi <= 50)  return "Good";
+    if (aqi <= 100) return "Satisfactory";
+    if (aqi <= 200) return "Moderate";
+    if (aqi <= 300) return "Poor";
+    if (aqi <= 400) return "Very Poor";
+    return                 "Severe";
+  }
+
+  // US EPA
   if (aqi <= 50)  return "Good";
   if (aqi <= 100) return "Moderate";
   if (aqi <= 150) return "Unhealthy (Sensitive)";
   if (aqi <= 200) return "Unhealthy";
   if (aqi <= 300) return "Very Unhealthy";
-  return           "Hazardous";
+  return                 "Hazardous";
 }
 
 // ── Continuous AQI color interpolators (for IDW estimate layer) ──────────────
-var AQI_RAMP = [
+var AQI_RAMP_US = [
   { aqi:   0, r:   0, g: 228, b:   0 }, // green (#00e400)
   { aqi:  50, r:   0, g: 228, b:   0 },
   { aqi: 100, r: 255, g: 255, b:   0 }, // yellow (#ffff00)
@@ -65,12 +217,24 @@ var AQI_RAMP = [
   { aqi: 500, r: 126, g:   0, b:  35 }, // maroon (#7e0023)
 ];
 
-function getAqiColorContinuous(aqi) {
+var AQI_RAMP_INDIA = [
+  { aqi:   0, r:   0, g: 176, b:  80 }, // #00b050
+  { aqi:  50, r:   0, g: 176, b:  80 },
+  { aqi: 100, r: 146, g: 208, b:  80 }, // #92d050
+  { aqi: 200, r: 234, g: 179, b:   8 }, // #eab308
+  { aqi: 300, r: 255, g: 153, b:   0 }, // #ff9900
+  { aqi: 400, r: 255, g:   0, b:   0 }, // #ff0000
+  { aqi: 500, r: 112, g:  48, b: 160 }, // #7030a0
+];
+
+function getAqiColorContinuous(aqi, scale) {
+  scale = scale || currentAqiScale || "india";
+  var ramp = (scale === "india") ? AQI_RAMP_INDIA : AQI_RAMP_US;
   aqi = Math.max(0, Math.min(aqi, 500));
 
-  for (var i = 0; i < AQI_RAMP.length - 1; i++) {
-    var lo = AQI_RAMP[i];
-    var hi = AQI_RAMP[i + 1];
+  for (var i = 0; i < ramp.length - 1; i++) {
+    var lo = ramp[i];
+    var hi = ramp[i + 1];
     if (aqi <= hi.aqi) {
       var t = (aqi - lo.aqi) / (hi.aqi - lo.aqi);
       return [
@@ -80,7 +244,7 @@ function getAqiColorContinuous(aqi) {
       ];
     }
   }
-  var top = AQI_RAMP[AQI_RAMP.length - 1];
+  var top = ramp[ramp.length - 1];
   return [top.r, top.g, top.b];
 }
 
@@ -115,11 +279,13 @@ function computeIdw(lat, lng, stations, power) {
     var dLng = lng - s.lng;
     var dist = Math.sqrt(dLat * dLat + dLng * dLng);
 
+    var aqiVal = (s.displayAqi !== undefined && s.displayAqi !== null) ? s.displayAqi : s.aqi;
+
     // If the point sits almost exactly on a station, return its AQI directly
     // (also avoids dividing by ~zero).
-    if (dist < 0.0001) return s.aqi;
+    if (dist < 0.0001) return aqiVal;
 
-    candidates.push({ dist: dist, aqi: s.aqi });
+    candidates.push({ dist: dist, aqi: aqiVal });
   }
 
   // Sort by distance so we can easily pick the nearest IDW_MIN_STATIONS.
@@ -208,22 +374,32 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 
 // ── 5. Legend ────────────────────────────────────────────────────────────────
-// Displays standard US EPA AQI category bands and colors.
+// Displays standard AQI category bands and colors for India NAQI or US EPA AQI.
 
 const legend = L.control({ position: "bottomright" });
+var legendContainer = null;
 
-legend.onAdd = function () {
-  var div = L.DomUtil.create("div", "legend");
-  var bands = [
+function updateLegend() {
+  if (!legendContainer) return;
+  var isIndia = (currentAqiScale === "india");
+  var title = isIndia ? "India NAQI (CPCB)" : "US AQI (EPA)";
+  var bands = isIndia ? [
+    ["#00b050", "0 – 50: Good"],
+    ["#92d050", "51 – 100: Satisfactory"],
+    ["#eab308", "101 – 200: Moderate"],
+    ["#ff9900", "201 – 300: Poor"],
+    ["#ff0000", "301 – 400: Very Poor"],
+    ["#7030a0", "401+: Severe"]
+  ] : [
     ["#00e400", "0 – 50: Good"],
     ["#ffff00", "51 – 100: Moderate"],
-    ["#ff7e00", "101 – 150: Unhealthy (Sensitive)"],
+    ["#ff7e00", "101 – 150: Unhealthy (Sens.)"],
     ["#ff0000", "151 – 200: Unhealthy"],
     ["#8f3f97", "201 – 300: Very Unhealthy"],
     ["#7e0023", "301+: Hazardous"]
   ];
 
-  var html = '<div class="legend-title">US AQI (EPA)</div>';
+  var html = '<div class="legend-title">' + title + '</div>';
   bands.forEach(function (b) {
     html +=
       '<div class="legend-item">' +
@@ -232,8 +408,18 @@ legend.onAdd = function () {
       '</div>';
   });
 
-  div.innerHTML = html;
-  return div;
+  if (isIndia) {
+    html += '<div style="font-size:10px;color:var(--text-secondary);margin-top:6px;border-top:1px solid var(--border-color);padding-top:4px;">*Stations without raw PM data show US scale fallback.</div>';
+  }
+
+  legendContainer.innerHTML = html;
+}
+
+legend.onAdd = function () {
+  legendContainer = L.DomUtil.create("div", "legend");
+  legendContainer.id = "map-legend-box";
+  updateLegend();
+  return legendContainer;
 };
 
 legend.addTo(map);
@@ -568,15 +754,108 @@ function formatMeasuredTime(rawTime) {
          " <span style='color:" + ageColor + ";'>(" + ageText + ")</span>";
 }
 
+// ── 3. Time Helpers & Relative Update Formatter ──────────────────────────────
+var lastStationFetchTimestamp = null;
+var totalStationsCount = 0;
+var skippedStationsCount = 0;
+
+function getUpdatedTimeAgoString(timestamp) {
+  if (!timestamp) return "Data updated just now";
+  var diffMs = Date.now() - timestamp.getTime();
+  var diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 45) {
+    return "Data updated just now";
+  }
+  var diffMin = Math.floor(diffSec / 60);
+  if (diffMin === 1) {
+    return "Data updated 1 min ago";
+  }
+  if (diffMin < 60) {
+    return "Data updated " + diffMin + " min ago";
+  }
+  var diffHours = Math.floor(diffMin / 60);
+  if (diffHours === 1) {
+    return "Data updated 1 hr ago";
+  }
+  return "Data updated " + diffHours + " hrs ago";
+}
+
+function updateRelativeTimeLabels() {
+  if (!lastStationFetchTimestamp) return;
+  var agoStr = getUpdatedTimeAgoString(lastStationFetchTimestamp);
+
+  // Map badge
+  var mapBadge = document.getElementById("map-data-updated-badge");
+  if (mapBadge) {
+    mapBadge.innerHTML = '<span class="status-pulse-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;margin-right:6px;"></span>' + agoStr;
+  }
+
+  // Delhi AQI Now page hero badge
+  var nowUpdatedEl = document.getElementById("now-updated-time");
+  if (nowUpdatedEl) {
+    var timeStr = lastStationFetchTimestamp.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+    nowUpdatedEl.textContent = agoStr + " (" + timeStr + " IST)";
+  }
+
+  // Map stats box
+  var statsTextEl = document.getElementById("stats-last-updated-text");
+  if (statsTextEl) {
+    statsTextEl.textContent = agoStr;
+  }
+}
+
+// Tick relative time every 30 seconds
+setInterval(updateRelativeTimeLabels, 30000);
+
+// ── Scale Toggle Controller ──────────────────────────────────────────────────
+function setAqiScale(scale) {
+  if (scale !== "india" && scale !== "us") scale = "india";
+  currentAqiScale = scale;
+  try {
+    localStorage.setItem("preferred_aqi_scale", scale);
+  } catch (e) {}
+
+  var btnIndia = document.getElementById("scale-btn-india");
+  var btnUs = document.getElementById("scale-btn-us");
+  if (btnIndia && btnUs) {
+    if (scale === "india") {
+      btnIndia.classList.add("active");
+      btnUs.classList.remove("active");
+    } else {
+      btnUs.classList.add("active");
+      btnIndia.classList.remove("active");
+    }
+  }
+
+  updateLegend();
+
+  if (currentValidStations && currentValidStations.length > 0) {
+    currentValidStations.forEach(function (s) {
+      var res = getStationAqi(s, currentAqiScale);
+      s.displayAqi = res.value;
+      s.displayScale = res.scale;
+      s.isFallback = res.isFallback;
+    });
+    applyStationsToMap(currentValidStations, totalStationsCount, skippedStationsCount);
+  }
+}
+
 // ── 3. Apply Station Data to Map & Layers ─────────────────────────────────────
 function applyStationsToMap(stations, totalCount, skippedCount) {
   stationMarkers.clearLayers();
   currentValidStations = stations;
+  if (totalCount !== undefined) totalStationsCount = totalCount;
+  if (skippedCount !== undefined) skippedStationsCount = skippedCount;
 
   stations.forEach(function (station) {
-    var aqi = station.aqi;
-    var color = getAqiColor(aqi);
-    var label = getAqiLabel(aqi);
+    var res = getStationAqi(station, currentAqiScale);
+    station.displayAqi = res.value;
+    station.displayScale = res.scale;
+    station.isFallback = res.isFallback;
+
+    var aqi = station.displayAqi;
+    var color = res.color;
+    var label = res.label;
 
     var marker = L.circleMarker([station.lat, station.lng], {
       radius: 10,           // size of the circle in pixels
@@ -587,10 +866,15 @@ function applyStationsToMap(stations, totalCount, skippedCount) {
       fillOpacity: 0.85,
     });
 
+    var scaleName = (currentAqiScale === "india") ? "India NAQI" : "US AQI";
+    var fallbackBadge = station.isFallback
+      ? '<span class="scale-fallback-tag" title="Raw PM values unavailable from sensor; fell back to US EPA AQI">(US scale fallback)</span>'
+      : '<span style="font-size:0.85em;color:var(--text-secondary);">(' + scaleName + ')</span>';
+
     var popupContent =
       "<strong>" + escapeHtml(station.name) + "</strong><br>" +
-      "AQI: <strong style='color:" + color + ";font-size:1.2em'>" + aqi + "</strong>" +
-      " (" + escapeHtml(label) + ")";
+      "AQI: <strong style='color:" + color + ";font-size:1.2em'>" + aqi + "</strong> " + fallbackBadge + "<br>" +
+      "Category: <strong>" + escapeHtml(label) + "</strong>";
 
     if (station.time) {
       popupContent +=
@@ -622,13 +906,17 @@ function applyStationsToMap(stations, totalCount, skippedCount) {
   if (liveCountEl) liveCountEl.textContent = stations.length + " Live";
 
   // Update top-left stats box
-  var now = formatTime(new Date());
   var statsBoxEl = document.getElementById("stats-box");
   if (statsBoxEl) {
+    var scaleInfo = (currentAqiScale === "india") ? "India NAQI" : "US AQI";
+    var ago = getUpdatedTimeAgoString(lastStationFetchTimestamp);
     statsBoxEl.innerHTML =
-      "Stations: " + totalCount + " returned, " + skippedCount + " skipped" +
-      "<br>Last updated: " + now;
+      "Stations: " + totalStationsCount + " returned, " + skippedStationsCount + " skipped" +
+      "<br>Scale: <strong>" + scaleInfo + "</strong>" +
+      "<br><span id='stats-last-updated-text'>" + ago + "</span>";
   }
+
+  updateRelativeTimeLabels();
 }
 
 // ── WAQI Fetcher (Proxied via /api/stations with 10-min cache) ───────────────
@@ -655,18 +943,47 @@ function fetchWaqiStations() {
           return;
         }
 
-        validList.push({
+        var pm25 = null;
+        if (station.pm25 !== undefined && station.pm25 !== null && !isNaN(station.pm25)) {
+          pm25 = Number(station.pm25);
+        } else if (station.iaqi && station.iaqi.pm25 && station.iaqi.pm25.v !== undefined) {
+          pm25 = Number(station.iaqi.pm25.v);
+        }
+
+        var pm10 = null;
+        if (station.pm10 !== undefined && station.pm10 !== null && !isNaN(station.pm10)) {
+          pm10 = Number(station.pm10);
+        } else if (station.iaqi && station.iaqi.pm10 && station.iaqi.pm10.v !== undefined) {
+          pm10 = Number(station.iaqi.pm10.v);
+        }
+
+        var stObj = {
           id: station.uid,
           name: station.station.name,
           lat: station.lat,
           lng: station.lon,
+          usAqi: aqi,
           aqi: aqi,
+          pm25: pm25,
+          pm10: pm10,
           time: station.station && station.station.time ? station.station.time : null
-        });
+        };
+
+        var aqiInfo = getStationAqi(stObj, currentAqiScale);
+        stObj.displayAqi = aqiInfo.value;
+        stObj.displayScale = aqiInfo.scale;
+        stObj.isFallback = aqiInfo.isFallback;
+
+        validList.push(stObj);
       });
+
+      lastStationFetchTimestamp = new Date();
+      totalStationsCount = stations.length;
+      skippedStationsCount = skippedCount;
 
       console.log("WAQI stations returned: " + stations.length + ", valid: " + validList.length);
       applyStationsToMap(validList, stations.length, skippedCount);
+      updateRelativeTimeLabels();
     })
     .catch(function (err) {
       console.warn("WAQI fetch error:", err);
@@ -773,9 +1090,64 @@ function checkOrsKey() {
 // PHASE 7: HEALTH ADVICE, HEALTH PROFILES & SAVED PLACES
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── Part A: Health Advice by US AQI Category ──────────────────────────────────
-// Returns tailored guidance and severity for the specified AQI reading
-function getHealthAdvice(aqi) {
+// ── Part A: Health Advice by AQI Category (India NAQI & US EPA) ──────────────
+// Returns tailored guidance, category label, severity level, and styling
+function getHealthAdvice(aqi, scale) {
+  scale = scale || currentAqiScale || "india";
+
+  if (scale === "india") {
+    if (aqi <= 50) {
+      return {
+        category: "Good",
+        severity: "low",
+        advice: "Air quality is good. Minimal impact on health. Enjoy outdoor activities.",
+        color: "#00b050",
+        textColor: "#ffffff"
+      };
+    } else if (aqi <= 100) {
+      return {
+        category: "Satisfactory",
+        severity: "low",
+        advice: "Air quality is acceptable. May cause minor breathing discomfort to sensitive people.",
+        color: "#92d050",
+        textColor: "#111111"
+      };
+    } else if (aqi <= 200) {
+      return {
+        category: "Moderate",
+        severity: "moderate",
+        advice: "May cause breathing discomfort to people with lung disease, asthma, and heart conditions.",
+        color: "#eab308",
+        textColor: "#111111"
+      };
+    } else if (aqi <= 300) {
+      return {
+        category: "Poor",
+        severity: "warning",
+        advice: "May cause breathing discomfort to most people on prolonged outdoor exposure.",
+        color: "#ff9900",
+        textColor: "#ffffff"
+      };
+    } else if (aqi <= 400) {
+      return {
+        category: "Very Poor",
+        severity: "very_unhealthy",
+        advice: "Respiratory illness on prolonged exposure. Avoid strenuous outdoor activities.",
+        color: "#ff0000",
+        textColor: "#ffffff"
+      };
+    } else {
+      return {
+        category: "Severe",
+        severity: "hazardous",
+        advice: "Affects healthy people and seriously impacts those with existing diseases. Stay indoors.",
+        color: "#7030a0",
+        textColor: "#ffffff"
+      };
+    }
+  }
+
+  // US EPA Standards
   if (aqi <= 50) {
     return {
       category: "Good",
@@ -918,10 +1290,11 @@ function updateHealthAdvicePanel() {
   }
 
   var aqi = Math.round(computeIdw(targetLat, targetLng, currentValidStations));
-  var adviceObj = getHealthAdvice(aqi);
+  var adviceObj = getHealthAdvice(aqi, currentAqiScale);
+  var scalePrefix = (currentAqiScale === "india") ? "India NAQI " : "US AQI ";
 
   labelEl.textContent = locTitle;
-  pillEl.textContent = "AQI " + aqi + " (" + adviceObj.category + ")";
+  pillEl.textContent = scalePrefix + aqi + " (" + adviceObj.category + ")";
   pillEl.style.backgroundColor = adviceObj.color;
   pillEl.style.color = adviceObj.textColor;
   msgEl.textContent = adviceObj.advice;
@@ -2534,18 +2907,20 @@ function updateDelhiAqiNow() {
   var maxStation = null;
 
   currentValidStations.forEach(function (s) {
-    totalAqi += s.aqi;
-    if (!minStation || s.aqi < minStation.aqi) minStation = s;
-    if (!maxStation || s.aqi > maxStation.aqi) maxStation = s;
+    var val = (s.displayAqi !== undefined && s.displayAqi !== null) ? s.displayAqi : s.aqi;
+    totalAqi += val;
+    if (!minStation || val < ((minStation.displayAqi !== undefined) ? minStation.displayAqi : minStation.aqi)) minStation = s;
+    if (!maxStation || val > ((maxStation.displayAqi !== undefined) ? maxStation.displayAqi : maxStation.aqi)) maxStation = s;
   });
 
   var avgAqi = Math.round(totalAqi / currentValidStations.length);
-  var adviceObj = getHealthAdvice(avgAqi);
-  var aqiColor = getAqiColor(avgAqi);
-  var aqiTextColor = (avgAqi <= 100) ? "#111" : "#fff";
+  var adviceObj = getHealthAdvice(avgAqi, currentAqiScale);
+  var aqiColor = getAqiColor(avgAqi, currentAqiScale);
+  var aqiTextColor = adviceObj.textColor;
 
   var valEl = document.getElementById("hero-aqi-value");
   var badgeEl = document.getElementById("hero-category-badge");
+  var scaleTagEl = document.getElementById("hero-scale-tag");
   var minEl = document.getElementById("hero-min-station");
   var maxEl = document.getElementById("hero-max-station");
   var adviceEl = document.getElementById("hero-advice-text");
@@ -2557,27 +2932,36 @@ function updateDelhiAqiNow() {
   var timeStr = now.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
 
   if (valEl) valEl.textContent = avgAqi;
+  if (scaleTagEl) scaleTagEl.textContent = (currentAqiScale === "india") ? "India NAQI" : "US AQI";
   if (badgeEl) {
     badgeEl.textContent = adviceObj.category;
     badgeEl.style.backgroundColor = aqiColor;
     badgeEl.style.color = aqiTextColor;
   }
-  if (minEl && minStation) minEl.textContent = minStation.name + " (" + minStation.aqi + ")";
-  if (maxEl && maxStation) maxEl.textContent = maxStation.name + " (" + maxStation.aqi + ")";
+
+  var minAqi = minStation ? ((minStation.displayAqi !== undefined) ? minStation.displayAqi : minStation.aqi) : 0;
+  var maxAqi = maxStation ? ((maxStation.displayAqi !== undefined) ? maxStation.displayAqi : maxStation.aqi) : 0;
+  var minFallback = (minStation && minStation.isFallback) ? " (US fallback)" : "";
+  var maxFallback = (maxStation && maxStation.isFallback) ? " (US fallback)" : "";
+
+  if (minEl && minStation) minEl.textContent = minStation.name + " (" + minAqi + minFallback + ")";
+  if (maxEl && maxStation) maxEl.textContent = maxStation.name + " (" + maxAqi + maxFallback + ")";
   if (adviceEl) adviceEl.textContent = adviceObj.advice;
   if (dateBadgeEl) dateBadgeEl.textContent = dateStr;
-  if (updatedTimeEl) updatedTimeEl.textContent = "Live as of " + timeStr + " IST";
+
+  var agoStr = getUpdatedTimeAgoString(lastStationFetchTimestamp);
+  if (updatedTimeEl) updatedTimeEl.textContent = agoStr + " (" + timeStr + " IST)";
 
   // KPIs
   var cleanestNameEl = document.getElementById("kpi-cleanest-name");
   var cleanestAqiEl = document.getElementById("kpi-cleanest-aqi");
-  if (cleanestNameEl && minStation) cleanestNameEl.textContent = minStation.name;
-  if (cleanestAqiEl && minStation) cleanestAqiEl.textContent = "AQI " + minStation.aqi;
+  if (cleanestNameEl && minStation) cleanestNameEl.textContent = minStation.name + minFallback;
+  if (cleanestAqiEl && minStation) cleanestAqiEl.textContent = "AQI " + minAqi;
 
   var highestNameEl = document.getElementById("kpi-highest-name");
   var highestAqiEl = document.getElementById("kpi-highest-aqi");
-  if (highestNameEl && maxStation) highestNameEl.textContent = maxStation.name;
-  if (highestAqiEl && maxStation) highestAqiEl.textContent = "AQI " + maxStation.aqi;
+  if (highestNameEl && maxStation) highestNameEl.textContent = maxStation.name + maxFallback;
+  if (highestAqiEl && maxStation) highestAqiEl.textContent = "AQI " + maxAqi;
 
   var countEl = document.getElementById("kpi-stations-count");
   if (countEl) countEl.textContent = currentValidStations.length;
@@ -2727,10 +3111,12 @@ function renderAreasTable() {
     return s.name.toLowerCase().indexOf(filterText) !== -1;
   });
 
-  // Sort by AQI or Name
+  // Sort by AQI (in active scale) or Name
   filtered.sort(function (a, b) {
+    var valA = (a.displayAqi !== undefined && a.displayAqi !== null) ? a.displayAqi : a.aqi;
+    var valB = (b.displayAqi !== undefined && b.displayAqi !== null) ? b.displayAqi : b.aqi;
     if (areasSortColumn === "aqi") {
-      return areasSortAsc ? (a.aqi - b.aqi) : (b.aqi - a.aqi);
+      return areasSortAsc ? (valA - valB) : (valB - valA);
     } else if (areasSortColumn === "name") {
       return areasSortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
     }
@@ -2748,16 +3134,20 @@ function renderAreasTable() {
 
   tbody.innerHTML = "";
   filtered.forEach(function (station) {
-    var aqiColor = getAqiColor(station.aqi);
-    var aqiTextColor = (station.aqi <= 100) ? "#111" : "#fff";
-    var advice = getHealthAdvice(station.aqi);
+    var aqiVal = (station.displayAqi !== undefined && station.displayAqi !== null) ? station.displayAqi : station.aqi;
+    var aqiColor = getAqiColor(aqiVal, currentAqiScale);
+    var advice = getHealthAdvice(aqiVal, currentAqiScale);
+    var aqiTextColor = advice.textColor;
     var timeFormatted = station.time ? formatMeasuredTime(station.time) : "Recent";
+    var fallbackNote = station.isFallback
+      ? ' <span class="scale-fallback-tag" title="PM sensor concentration missing; showing US EPA AQI">US Fallback</span>'
+      : '';
 
     var tr = document.createElement("tr");
     tr.className = "clickable-row";
     tr.innerHTML =
-      '<td><strong>' + escapeHtml(station.name) + '</strong></td>' +
-      '<td><span class="station-aqi-pill" style="background:' + aqiColor + ';color:' + aqiTextColor + ';">' + station.aqi + '</span></td>' +
+      '<td><strong>' + escapeHtml(station.name) + '</strong>' + fallbackNote + '</td>' +
+      '<td><span class="station-aqi-pill" style="background:' + aqiColor + ';color:' + aqiTextColor + ';">' + aqiVal + '</span></td>' +
       '<td><span class="station-cat-badge">' + escapeHtml(advice.category) + '</span></td>' +
       '<td style="font-size:12px;color:var(--text-secondary);">' + escapeHtml(timeFormatted) + '</td>' +
       '<td><button type="button" class="btn-view-map" title="View on Live Map">📍 Map</button></td>';
@@ -2821,13 +3211,14 @@ function generateShareCard(callback) {
   var minStation = null;
   var maxStation = null;
   currentValidStations.forEach(function (s) {
-    totalAqi += s.aqi;
-    if (!minStation || s.aqi < minStation.aqi) minStation = s;
-    if (!maxStation || s.aqi > maxStation.aqi) maxStation = s;
+    var val = (s.displayAqi !== undefined && s.displayAqi !== null) ? s.displayAqi : s.aqi;
+    totalAqi += val;
+    if (!minStation || val < ((minStation.displayAqi !== undefined) ? minStation.displayAqi : minStation.aqi)) minStation = s;
+    if (!maxStation || val > ((maxStation.displayAqi !== undefined) ? maxStation.displayAqi : maxStation.aqi)) maxStation = s;
   });
   var avgAqi = currentValidStations.length > 0 ? Math.round(totalAqi / currentValidStations.length) : 150;
-  var advice = getHealthAdvice(avgAqi);
-  var aqiColor = getAqiColor(avgAqi);
+  var advice = getHealthAdvice(avgAqi, currentAqiScale);
+  var aqiColor = getAqiColor(avgAqi, currentAqiScale);
 
   var now = new Date();
   var dateStr = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -2880,7 +3271,8 @@ function generateShareCard(callback) {
 
   ctx.fillStyle = "#94a3b8";
   ctx.font = "bold 16px system-ui, sans-serif";
-  ctx.fillText("US AQI (CITY AVG)", centerX, centerY + 65);
+  var scaleTitle = (currentAqiScale === "india") ? "INDIA NAQI (CITY AVG)" : "US AQI (CITY AVG)";
+  ctx.fillText(scaleTitle, centerX, centerY + 65);
 
   // Category Pill
   var pillW = 260;
@@ -2896,7 +3288,7 @@ function generateShareCard(callback) {
   }
   ctx.fill();
 
-  ctx.fillStyle = (avgAqi <= 100) ? "#111111" : "#ffffff";
+  ctx.fillStyle = advice.textColor;
   ctx.font = "800 22px system-ui, sans-serif";
   ctx.fillText(advice.category.toUpperCase(), centerX, pillY + 31);
 
@@ -2940,7 +3332,9 @@ function generateShareCard(callback) {
   ctx.font = "600 15px system-ui, sans-serif";
   var statsText = "Stations Reporting: " + currentValidStations.length;
   if (minStation && maxStation) {
-    statsText += "  •  Lowest: " + minStation.aqi + "  •  Highest: " + maxStation.aqi;
+    var minVal = (minStation.displayAqi !== undefined) ? minStation.displayAqi : minStation.aqi;
+    var maxVal = (maxStation.displayAqi !== undefined) ? maxStation.displayAqi : maxStation.aqi;
+    statsText += "  •  Lowest: " + minVal + "  •  Highest: " + maxVal;
   }
   ctx.fillText(statsText, centerX, 700);
 
@@ -3009,6 +3403,33 @@ if (copyShareBtn) {
       if (shareStatusMsg) shareStatusMsg.textContent = "📋 Click 'Download Image' to save as PNG.";
     }
   });
+}
+
+// ── AQI Scale Toggle Event Listeners ─────────────────────────────────────────
+var scaleBtnIndia = document.getElementById("scale-btn-india");
+var scaleBtnUs = document.getElementById("scale-btn-us");
+
+if (scaleBtnIndia) {
+  scaleBtnIndia.addEventListener("click", function () {
+    setAqiScale("india");
+  });
+}
+
+if (scaleBtnUs) {
+  scaleBtnUs.addEventListener("click", function () {
+    setAqiScale("us");
+  });
+}
+
+// Ensure toggle button active class reflects initial scale (India by default)
+if (scaleBtnIndia && scaleBtnUs) {
+  if (currentAqiScale === "india") {
+    scaleBtnIndia.classList.add("active");
+    scaleBtnUs.classList.remove("active");
+  } else {
+    scaleBtnUs.classList.add("active");
+    scaleBtnIndia.classList.remove("active");
+  }
 }
 
 // ── Initial Router Bootstrap ─────────────────────────────────────────────────

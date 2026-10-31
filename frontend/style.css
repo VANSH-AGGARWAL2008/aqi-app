@@ -229,6 +229,69 @@ html, body {
   border-color: var(--accent-cyan);
 }
 
+/* ── US AQI | India AQI Toggle Switcher ── */
+.scale-toggle-group {
+  display: flex;
+  align-items: center;
+  background: var(--input-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 9999px;
+  padding: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.scale-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.scale-toggle-btn:hover {
+  color: var(--text-primary);
+}
+
+.scale-toggle-btn.active {
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+}
+
+/* ── Map Data Updated Badge ── */
+.map-data-updated-badge {
+  position: absolute;
+  bottom: 24px;
+  left: 14px;
+  background: var(--panel-bg);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  z-index: 800;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.scale-fallback-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 4px;
+  margin-left: 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  font-weight: normal;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    PAGE VIEWS & CONTAINERS
    ───────────────────────────────────────────────────────────────────────────── */

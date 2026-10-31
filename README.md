@@ -42,7 +42,7 @@ The project runs as **ONE unified service**:
 - The server reads the host-assigned `$PORT` automatically and securely serves the static files from `frontend/`.
 
 ## Data Sources
-- **WAQI / CPCC / DPCC**: World Air Quality Index
+- **WAQI (aqicn.org)**: World Air Quality Index
 - **Open-Meteo**: Hourly air quality forecasts
 - **OpenRouteService & Photon**: Geocoding and route directions
 - **OpenStreetMap**: Map tiles & geometries
