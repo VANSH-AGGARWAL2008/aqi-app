@@ -3,13 +3,23 @@
 A live air-quality map and least-polluted route navigation system for Delhi NCR, built as a unified web service serving both the frontend and backend.
 
 ## What it does
-- Shows real-time AQI from monitoring stations across Delhi NCR with CPCB India NAQI & US EPA standard toggles.
-- Estimates continuous AQI across the city using an Inverse Distance Weighted (IDW) color map layer.
-- **One-Tap Commute Planner**: Saves Home and Work locations to instantly calculate cleanest vs. fastest travel options, exposure reduction %, and forecasted departure windows.
-- **Installable Mobile PWA**: Web App Manifest, Service Worker (`sw.js`), and offline stale-data guard that displays last-cached sensor data with an honest data-age label when disconnected.
-- Calculates routes (Driving, Walking, Cycling) and scores each by cumulative pollution exposure with physiological exertion breathing multipliers ($2.5\times$ Walking, $2.2\times$ Cycling, $1.0\times$ Driving).
-- Highlights the cleanest route and provides tailored health advice based on user profile.
-- Suggests optimal departure times based on 24-hour forecasted pollution trends.
+Delhi AQI Sentinel is designed for everyday Delhi commuters, parents, joggers, elderly residents, and schools. It delivers 9 specialized feature modules:
+
+1. **One-Tap Commute Planner**: Saves Home and Work once with instant cleanest vs. fastest travel comparison, exposure reduction %, optimal departure window in the next 3 hours, smart direction swap (Home ↔ Work), and an evening return trip outlook.
+2. **Personal Safety & Mask Advisor**: Activity-specific outdoor time limits (walking, running, cycling, school commute, manual labor), mask recommendations (None / Surgical / N95 Respirator with medical reasons), and inhaled minute-volume exertion multipliers.
+3. **Pollution Pulse & Atmospheric Dynamics**: Meteorological wind speed, wind direction, and temperature reasoning using Open-Meteo to explain ground-level trapping, temperature inversion, or regional stubble burning smoke inflow in plain language.
+4. **Healthy-Home & Ventilation Guide**: Evaluates the 24-hour diurnal air quality curve to identify the best afternoon solar window to open windows for ventilation vs. when to keep rooms sealed and run HEPA air cleaners.
+5. **Parents & School Air Safety Mode**: Instant green/amber/red traffic-light indicator for outdoor play, morning assemblies, and recess, with bilingual English and Hindi preformatted WhatsApp share messages for class and parent groups.
+6. **Station Comparison & Live Rankings**: Side-by-side comparison of up to 3 monitoring areas (PM2.5, PM10, primary pollutant, health advice), plus live Top 5 cleanest vs. Top 5 most polluted stations across NCR.
+7. **In-Tab Browser Alerts (Without a Server)**: Zero-backend notification system that triggers browser alerts if any saved place crosses your active profile's threshold while the web page remains open.
+8. **Installable Mobile App (PWA)**: Web App Manifest, Service Worker (`sw.js`), and offline stale-data guard that displays last-cached sensor data with an honest data-age label when disconnected.
+9. **Trip Exposure & Cigarette Inhalation Benchmark**: Translates fine particulate PM2.5 inhalation on any selected route into an educational cigarette-equivalent benchmark based on the Berkeley Earth rule of thumb (22 µg/m³ of PM2.5 over 24 hours ≈ 1 cigarette), with transparent scientific disclaimers.
+
+Additionally includes:
+- CPCB India NAQI & US EPA AQI standard switch with authentic color palettes and health categories.
+- Continuous IDW interpolation layer across the entire Delhi NCR basin.
+- Dark mode and light mode with accessible high-contrast form controls.
+- Responsive layout supporting small 360px mobile screens up to widescreen desktop displays.
 
 ## Known Limitations
 1. **Free Upstream Quotas**: World Air Quality Index (WAQI) and OpenRouteService (ORS) operate on free community tiers. Responses are cached for 10 minutes on the FastAPI server to prevent quota exhaustion.

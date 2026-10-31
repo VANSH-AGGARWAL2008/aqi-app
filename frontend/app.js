@@ -995,6 +995,9 @@ function fetchWaqiStations() {
       console.log("WAQI stations returned: " + stations.length + ", valid: " + validList.length);
       applyStationsToMap(validList, stations.length, skippedCount);
       updateRelativeTimeLabels();
+      if (typeof checkSavedPlacesAlerts === "function") {
+        checkSavedPlacesAlerts();
+      }
     })
     .catch(function (err) {
       console.warn("WAQI fetch error:", err);
@@ -2819,6 +2822,11 @@ function renderRoutes(geojson, isFallbackSingle, forcedMode) {
     fetchLeaveTimeSuggestion(startLat, startLng, cleanestRoute);
   }
 
+  // Feature 9: Show trip cigarette impact for the cleanest route by default
+  if (distinctRoutes[cleanestIndex]) {
+    updateTripImpactCard(distinctRoutes[cleanestIndex]);
+  }
+
   // Zoom map to fit the full route
   if (allLatLngs.length > 0) {
     map.fitBounds(L.latLngBounds(allLatLngs), { padding: [50, 50] });
@@ -2855,6 +2863,11 @@ function highlightRoute(targetIndex) {
       }
     }
   });
+
+  // Feature 9: Update Trip Cigarette & Inhalation Exposure Card
+  if (window.currentRoutesData && window.currentRoutesData[targetIndex]) {
+    updateTripImpactCard(window.currentRoutesData[targetIndex]);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2900,6 +2913,10 @@ applyTheme(currentTheme);
 var PAGE_VIEWS = {
   map: document.getElementById("view-map"),
   now: document.getElementById("view-now"),
+  commute: document.getElementById("view-commute"),
+  advisor: document.getElementById("view-advisor"),
+  school: document.getElementById("view-school"),
+  compare: document.getElementById("view-compare"),
   areas: document.getElementById("view-areas"),
   guide: document.getElementById("view-guide"),
   about: document.getElementById("view-about")
@@ -2945,10 +2962,18 @@ function switchPage(pageKey) {
   } else if (targetKey === "now") {
     updateDelhiAqiNow();
     renderTrendChart();
-  } else if (targetKey === "areas") {
-    renderAreasTable();
+    updatePollutionPulse();
+    updateHealthyHomeHelper();
   } else if (targetKey === "commute") {
     renderCommutePage();
+  } else if (targetKey === "advisor") {
+    renderPersonalSafetyAdvisor();
+  } else if (targetKey === "school") {
+    renderSchoolMode();
+  } else if (targetKey === "compare") {
+    renderStationComparison();
+  } else if (targetKey === "areas") {
+    renderAreasTable();
   }
 
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -3494,19 +3519,10 @@ if (scaleBtnIndia && scaleBtnUs) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// FEATURE 1: COMMUTE PLANNER
-// ══════════════════════════════════════════════════════════════════════════════
-// One-tap card that:
-//   1. Reads "Home" and "Work" (or "Office") from Saved Places
-//   2. Fetches the cleanest + fastest routes via the existing /api/route proxy
-//   3. Scores each route with scoreRoutePollution() (reused from Phase 4)
-//   4. Shows exposure difference between cleanest vs fastest
-//   5. Fetches Open-Meteo forecast to suggest the best departure time in 3 hours
-//      (reuses the same getForecastAqi / getTripExposure logic as fetchLeaveTimeSuggestion)
-// ══════════════════════════════════════════════════════════════════════════════
-
-// The last computed commute routes; used when "View on Live Map" is clicked
+// FEATURE 1: COMMUTE PLANNER (ENHANCED WITH SMART SWAP & RETURN OUTLOOK)
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
 var lastCommuteRouteData = null;
+var commuteDirectionSwapped = false;
 
 /**
  * renderCommutePage()
@@ -3520,7 +3536,6 @@ function renderCommutePage() {
   var errorEl = document.getElementById("commute-error");
   var loadingEl = document.getElementById("commute-loading");
 
-  // Find Home and Work in saved places (case-insensitive match)
   var places = getSavedPlaces();
   var homePlace = places.find(function (p) {
     return /^home$/i.test(p.name.trim());
@@ -3529,35 +3544,43 @@ function renderCommutePage() {
     return /^(work|office)$/i.test(p.name.trim());
   });
 
-  // If either is missing, show the setup guide and hide the card
   if (!homePlace || !workPlace) {
     if (setupPrompt) setupPrompt.style.display = "block";
     if (commuteCard) commuteCard.style.display = "none";
     return;
   }
 
-  // Both found — show the card
   if (setupPrompt) setupPrompt.style.display = "none";
   if (commuteCard) commuteCard.style.display = "block";
   if (resultsEl) resultsEl.style.display = "none";
   if (errorEl) errorEl.style.display = "none";
   if (loadingEl) loadingEl.style.display = "none";
 
-  // Populate endpoint labels
+  var originPlace = commuteDirectionSwapped ? workPlace : homePlace;
+  var destPlace = commuteDirectionSwapped ? homePlace : workPlace;
+
   var homeNameEl = document.getElementById("commute-home-name");
   var workNameEl = document.getElementById("commute-work-name");
-  if (homeNameEl) homeNameEl.textContent = homePlace.name;
-  if (workNameEl) workNameEl.textContent = workPlace.name;
+  var originLabel = document.getElementById("commute-origin-label");
+  var destLabel = document.getElementById("commute-dest-label");
+  var originIcon = document.getElementById("commute-origin-icon");
+  var destIcon = document.getElementById("commute-dest-icon");
 
-  // Show live AQI pills for Home and Work using IDW
-  updateCommuteAqiPills(homePlace, workPlace);
+  if (originLabel) originLabel.textContent = commuteDirectionSwapped ? "Origin (Work)" : "Origin (Home)";
+  if (destLabel) destLabel.textContent = commuteDirectionSwapped ? "Destination (Home)" : "Destination (Work)";
+  if (originIcon) originIcon.textContent = commuteDirectionSwapped ? "🏢" : "🏠";
+  if (destIcon) destIcon.textContent = commuteDirectionSwapped ? "🏠" : "🏢";
+  if (homeNameEl) homeNameEl.textContent = originPlace.name;
+  if (workNameEl) workNameEl.textContent = destPlace.name;
+
+  updateCommuteAqiPills(originPlace, destPlace);
 }
 
 /**
- * updateCommuteAqiPills(homePlace, workPlace)
- * Shows the current AQI estimate at each endpoint using IDW interpolation.
+ * updateCommuteAqiPills(originPlace, destPlace)
+ * Shows current AQI estimate at origin and destination using IDW interpolation.
  */
-function updateCommuteAqiPills(homePlace, workPlace) {
+function updateCommuteAqiPills(originPlace, destPlace) {
   function setPill(elId, lat, lng) {
     var el = document.getElementById(elId);
     if (!el) return;
@@ -3572,21 +3595,23 @@ function updateCommuteAqiPills(homePlace, workPlace) {
     el.style.background = color;
     el.style.color = getHealthAdvice(aqi, currentAqiScale).textColor;
   }
-  setPill("commute-home-aqi", homePlace.lat, homePlace.lng);
-  setPill("commute-work-aqi", workPlace.lat, workPlace.lng);
+  setPill("commute-home-aqi", originPlace.lat, originPlace.lng);
+  setPill("commute-work-aqi", destPlace.lat, destPlace.lng);
 }
 
 /**
  * runCommuteRoute()
- * Fetches up to 3 alternative routes from Home → Work, scores each one,
- * identifies the cleanest and fastest, then shows results.
- * Also calls the leave-time suggestion logic.
+ * Fetches alternative routes between origin & destination, scores them,
+ * and renders cleanest vs fastest along with leave-time and return forecast.
  */
 function runCommuteRoute() {
   var places = getSavedPlaces();
   var homePlace = places.find(function (p) { return /^home$/i.test(p.name.trim()); });
   var workPlace = places.find(function (p) { return /^(work|office)$/i.test(p.name.trim()); });
   if (!homePlace || !workPlace) return;
+
+  var originPlace = commuteDirectionSwapped ? workPlace : homePlace;
+  var destPlace = commuteDirectionSwapped ? homePlace : workPlace;
 
   var modeSelect = document.getElementById("commute-mode-select");
   var mode = modeSelect ? modeSelect.value : "driving-car";
@@ -3595,17 +3620,15 @@ function runCommuteRoute() {
   var resultsEl = document.getElementById("commute-results");
   var errorEl = document.getElementById("commute-error");
 
-  // Show loading state
   if (loadingEl) loadingEl.style.display = "flex";
   if (resultsEl) resultsEl.style.display = "none";
   if (errorEl) errorEl.style.display = "none";
 
-  // Build ORS route request with alternatives
   var bodyPayload = {
     mode: mode,
     coordinates: [
-      [homePlace.lng, homePlace.lat],
-      [workPlace.lng, workPlace.lat]
+      [originPlace.lng, originPlace.lat],
+      [destPlace.lng, destPlace.lat]
     ],
     alternative_routes: {
       target_count: 3,
@@ -3629,7 +3652,6 @@ function runCommuteRoute() {
         throw new Error("No routes returned");
       }
 
-      // Parse each route into { latlngs, distanceKm, durationMin }
       var routes = geojson.features.map(function (feat, idx) {
         var coords = feat.geometry.coordinates;
         var latlngs = coords.map(function (c) { return [c[1], c[0]]; });
@@ -3645,7 +3667,6 @@ function runCommuteRoute() {
         };
       });
 
-      // Score each route for pollution exposure
       routes.forEach(function (r) {
         var score = scoreRoutePollution(r.latlngs, r.durationMin, currentValidStations, mode);
         r.avgAqi = score.avgAqi;
@@ -3653,7 +3674,6 @@ function runCommuteRoute() {
         r.breathingFactor = score.breathingFactor;
       });
 
-      // Identify cleanest (lowest exposure) and fastest (lowest duration)
       var cleanest = routes.reduce(function (best, r) {
         return r.exposure < best.exposure ? r : best;
       }, routes[0]);
@@ -3661,16 +3681,16 @@ function runCommuteRoute() {
         return r.durationMin < best.durationMin ? r : best;
       }, routes[0]);
 
-      lastCommuteRouteData = { cleanest: cleanest, fastest: fastest, home: homePlace, work: workPlace, mode: mode };
+      lastCommuteRouteData = { cleanest: cleanest, fastest: fastest, home: originPlace, work: destPlace, mode: mode };
 
       if (loadingEl) loadingEl.style.display = "none";
-      showCommuteResults(cleanest, fastest, homePlace, workPlace, mode);
+      showCommuteResults(cleanest, fastest, originPlace, destPlace, mode);
     })
     .catch(function (err) {
       if (loadingEl) loadingEl.style.display = "none";
       if (errorEl) {
         var msg = err.message === "RATE_LIMIT"
-          ? "⚠️ Too many requests. Please wait a minute and try again."
+          ? "⏳ Too many requests. Please wait a minute and try again."
           : "❌ Could not fetch route: " + escapeHtml(err.message);
         errorEl.textContent = msg;
         errorEl.style.display = "block";
@@ -3679,10 +3699,10 @@ function runCommuteRoute() {
 }
 
 /**
- * showCommuteResults(cleanest, fastest, homePlace, workPlace, mode)
- * Populates the result cards with route data and triggers the leave-time suggestion.
+ * showCommuteResults(cleanest, fastest, originPlace, destPlace, mode)
+ * Renders commute comparison metrics, leave-time suggestion, and return forecast.
  */
-function showCommuteResults(cleanest, fastest, homePlace, workPlace, mode) {
+function showCommuteResults(cleanest, fastest, originPlace, destPlace, mode) {
   var resultsEl = document.getElementById("commute-results");
   var cleanestStatsEl = document.getElementById("commute-cleanest-stats");
   var cleanestExpEl = document.getElementById("commute-cleanest-exposure");
@@ -3692,55 +3712,51 @@ function showCommuteResults(cleanest, fastest, homePlace, workPlace, mode) {
 
   if (!resultsEl) return;
 
-  // Cleanest route card
   if (cleanestStatsEl) {
-    cleanestStatsEl.textContent = cleanest.distanceKm + " km · " + cleanest.durationMin + " min · Avg AQI " + cleanest.avgAqi;
+    cleanestStatsEl.textContent = cleanest.distanceKm + " km • " + cleanest.durationMin + " min • Avg AQI " + cleanest.avgAqi;
   }
   if (cleanestExpEl) {
     cleanestExpEl.textContent = "Exposure score: " + cleanest.exposure +
       (cleanest.breathingFactor !== 1 ? " (" + cleanest.breathingFactor + "× breathing)" : "");
   }
 
-  // Fastest route card
   if (fastestStatsEl) {
-    fastestStatsEl.textContent = fastest.distanceKm + " km · " + fastest.durationMin + " min · Avg AQI " + fastest.avgAqi;
+    fastestStatsEl.textContent = fastest.distanceKm + " km • " + fastest.durationMin + " min • Avg AQI " + fastest.avgAqi;
   }
   if (fastestExpEl) {
     fastestExpEl.textContent = "Exposure score: " + fastest.exposure;
   }
 
-  // Exposure difference callout
   if (diffEl) {
     if (cleanest.index !== fastest.index && fastest.exposure > 0) {
       var pctSaved = Math.round(((fastest.exposure - cleanest.exposure) / fastest.exposure) * 100);
       if (pctSaved > 0) {
         diffEl.innerHTML =
-          "🌿 Taking the <strong>Cleanest route</strong> saves ~<strong>" + pctSaved + "%</strong> less pollution exposure " +
+          "🛡️ Taking the <strong>Cleanest route</strong> saves ~<strong>" + pctSaved + "%</strong> less pollution exposure " +
           "vs the fastest route (" + cleanest.exposure + " vs " + fastest.exposure + " exposure units).";
         diffEl.style.display = "block";
-      } else if (pctSaved < 0) {
-        diffEl.innerHTML = "ℹ️ The fastest route is already the cleanest for this trip.";
-        diffEl.style.display = "block";
       } else {
-        diffEl.style.display = "none";
+        diffEl.innerHTML = "💡 The fastest route is already the cleanest for this trip.";
+        diffEl.style.display = "block";
       }
     } else {
-      diffEl.innerHTML = "ℹ️ Only one distinct route found — this is both the cleanest and fastest option.";
+      diffEl.innerHTML = "💡 Only one distinct route found — this is both the cleanest and fastest option.";
       diffEl.style.display = "block";
     }
   }
 
   resultsEl.style.display = "block";
 
-  // Trigger leave-time suggestion for the cleanest route, anchored at Home
-  fetchCommuteLeaveTime(homePlace.lat, homePlace.lng, cleanest);
+  // Trigger leave-time suggestion anchored at origin
+  fetchCommuteLeaveTime(originPlace.lat, originPlace.lng, cleanest);
+
+  // Trigger evening return outlook anchored at destination
+  fetchCommuteReturnForecast(destPlace, originPlace, mode);
 }
 
 /**
  * fetchCommuteLeaveTime(lat, lng, route)
- * Fetches the Open-Meteo forecast and suggests the best departure time
- * in the next 3 hours for the cleanest commute route.
- * Mirrors the logic in fetchLeaveTimeSuggestion() but writes to the commute card's elements.
+ * Suggests best departure time in next 3 hours using Open-Meteo forecast.
  */
 function fetchCommuteLeaveTime(lat, lng, route) {
   var box = document.getElementById("commute-leave-time");
@@ -3764,7 +3780,6 @@ function fetchCommuteLeaveTime(lat, lng, route) {
       var aqis = data.hourly.us_aqi;
       var pm25s = data.hourly.pm2_5 || [];
 
-      // Build a flat array of { timeMs, aqi } for linear interpolation
       var entries = [];
       for (var i = 0; i < times.length; i++) {
         var t = new Date(times[i]).getTime();
@@ -3777,7 +3792,6 @@ function fetchCommuteLeaveTime(lat, lng, route) {
 
       if (entries.length < 2) { box.style.display = "none"; return; }
 
-      // Linear interpolation at any timestamp
       function getForecastAqi(ms) {
         if (ms <= entries[0].timeMs) return entries[0].aqi;
         if (ms >= entries[entries.length - 1].timeMs) return entries[entries.length - 1].aqi;
@@ -3790,7 +3804,6 @@ function fetchCommuteLeaveTime(lat, lng, route) {
         return entries[entries.length - 1].aqi;
       }
 
-      // Average AQI over the trip duration starting at a given ms
       function getTripAvg(startMs, durationMin) {
         var stepMs = 5 * 60 * 1000;
         var durMs = (durationMin || 30) * 60 * 1000;
@@ -3803,8 +3816,6 @@ function fetchCommuteLeaveTime(lat, lng, route) {
 
       var nowMs = Date.now();
       var nowAvg = getTripAvg(nowMs, route.durationMin);
-
-      // Check 30/60/90/120/180 minute delays (same as main leave-time logic)
       var candidates = [30, 60, 90, 120, 180];
       var best = null;
       var maxReductionPct = 0;
@@ -3821,7 +3832,6 @@ function fetchCommuteLeaveTime(lat, lng, route) {
         }
       });
 
-      // Display suggestion
       if (best && best.pct >= 15) {
         var timeStr = new Date(best.startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
         textEl.innerHTML =
@@ -3834,12 +3844,80 @@ function fetchCommuteLeaveTime(lat, lng, route) {
       }
     })
     .catch(function (err) {
-      console.warn("Commute forecast error (silent):", err);
+      console.warn("Commute forecast error:", err);
       box.style.display = "none";
     });
 }
 
-// ── Wire up Commute page buttons ──────────────────────────────────────────────
+/**
+ * fetchCommuteReturnForecast(destPlace, originPlace, mode)
+ * Feature 1 Twist: Evening Return Commute Outlook
+ */
+function fetchCommuteReturnForecast(destPlace, originPlace, mode) {
+  var box = document.getElementById("commute-return-forecast");
+  var textEl = document.getElementById("commute-return-text");
+  if (!box || !textEl) return;
+
+  box.style.display = "block";
+  textEl.textContent = "Analyzing return trip conditions…";
+
+  var url = FORECAST_API_URL + "?lat=" + destPlace.lat.toFixed(4) + "&lng=" + destPlace.lng.toFixed(4);
+
+  fetch(url)
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (!data || !data.hourly || !data.hourly.time || !data.hourly.us_aqi) {
+        box.style.display = "none";
+        return;
+      }
+
+      var times = data.hourly.time;
+      var aqis = data.hourly.us_aqi;
+      var now = new Date();
+      var eveningEntry = null;
+
+      for (var i = 0; i < times.length; i++) {
+        var dt = new Date(times[i]);
+        if (dt.getDate() === now.getDate() && dt.getHours() >= 18 && dt.getHours() <= 20) {
+          eveningEntry = { dt: dt, aqi: aqis[i] };
+          break;
+        }
+      }
+      if (!eveningEntry && times.length > 8) {
+        eveningEntry = { dt: new Date(times[8]), aqi: aqis[8] };
+      }
+
+      if (eveningEntry && eveningEntry.aqi) {
+        var expAqi = Math.round(eveningEntry.aqi);
+        var curAqi = Math.round(computeIdw(destPlace.lat, destPlace.lng, currentValidStations) || expAqi);
+        var diff = expAqi - curAqi;
+        var diffDesc = diff > 15
+          ? "worsening by +" + diff + " points due to evening ground temperature inversion."
+          : (diff < -15 ? "improving by " + Math.abs(diff) + " points." : "staying fairly steady.");
+
+        textEl.innerHTML =
+          "Expected Return AQI (6-8 PM): ~<strong>" + expAqi + "</strong> (" + diffDesc + ")<br>" +
+          "<span style='font-size:0.85em;color:var(--text-secondary);'>" +
+          (expAqi > 200 ? "⚠️ Air quality deteriorates after sunset. An N95 respirator is strongly advised for your return trip." : "✅ Favorable travel conditions before late-night inversion settles.") +
+          "</span>";
+      } else {
+        box.style.display = "none";
+      }
+    })
+    .catch(function () {
+      box.style.display = "none";
+    });
+}
+
+// Direction Swap Button Click Listener
+var commuteSwapBtn = document.getElementById("commute-swap-btn");
+if (commuteSwapBtn) {
+  commuteSwapBtn.addEventListener("click", function () {
+    commuteDirectionSwapped = !commuteDirectionSwapped;
+    renderCommutePage();
+    runCommuteRoute();
+  });
+}
 
 // "Check Route Now" button
 var commuteRefreshBtn = document.getElementById("commute-refresh-btn");
@@ -3849,17 +3927,15 @@ if (commuteRefreshBtn) {
   });
 }
 
-// "View on Live Map" button — sets Home as start, Work as destination, and switches to Live Map
+// "View on Live Map" button
 var commuteViewMapBtn = document.getElementById("commute-view-map-btn");
 if (commuteViewMapBtn) {
   commuteViewMapBtn.addEventListener("click", function () {
     if (!lastCommuteRouteData) return;
     var home = lastCommuteRouteData.home;
     var work = lastCommuteRouteData.work;
-    // Set mode on Live Map to match commute selection
     var modeSelect = document.getElementById("mode-select");
     if (modeSelect && lastCommuteRouteData.mode) modeSelect.value = lastCommuteRouteData.mode;
-    // Switch page first, then set points after map is ready
     switchPage("map");
     setTimeout(function () {
       setStartPoint(home.lat, home.lng, home.name);
@@ -3868,11 +3944,10 @@ if (commuteViewMapBtn) {
   });
 }
 
-// ── Auto-run route when page is opened and mode changes ───────────────────────
+// Auto-run when mode changes
 var commuteModeSelect = document.getElementById("commute-mode-select");
 if (commuteModeSelect) {
   commuteModeSelect.addEventListener("change", function () {
-    // Only auto-run if results are already showing (don't run on first open)
     var resultsEl = document.getElementById("commute-results");
     if (resultsEl && resultsEl.style.display !== "none") {
       runCommuteRoute();
@@ -3880,17 +3955,751 @@ if (commuteModeSelect) {
   });
 }
 
-// ── Initial Router Bootstrap ─────────────────────────────────────────────────
-// Register the commute page in the router BEFORE first switchPage call
-PAGE_VIEWS["commute"] = document.getElementById("view-commute");
 
-switchPage(window.location.hash || "map");
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// FEATURE 9: TRIP EXPOSURE & BERKELEY EARTH CIGARETTE IMPACT
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
-// ══════════════════════════════════════════════════════════════════════════════
+/**
+ * aqiToEstimatedPm25(aqi, scale)
+ * Converts AQI reading into estimated fine particulate PM2.5 (µg/m³).
+ */
+function aqiToEstimatedPm25(aqi, scale) {
+  var val = Number(aqi);
+  if (isNaN(val) || val <= 0) return 0;
+  var useScale = scale || currentAqiScale || "india";
+
+  if (useScale === "india") {
+    if (val <= 50) return (val / 50) * 30;
+    if (val <= 100) return 30 + ((val - 50) / 50) * 30;
+    if (val <= 200) return 60 + ((val - 100) / 100) * 30;
+    if (val <= 300) return 90 + ((val - 200) / 100) * 30;
+    if (val <= 400) return 120 + ((val - 300) / 100) * 130;
+    return 250 + Math.min(250, ((val - 400) / 100) * 150);
+  } else {
+    if (val <= 50) return (val / 50) * 12.0;
+    if (val <= 100) return 12.1 + ((val - 50) / 50) * (35.4 - 12.1);
+    if (val <= 150) return 35.5 + ((val - 100) / 50) * (55.4 - 35.5);
+    if (val <= 200) return 55.5 + ((val - 150) / 50) * (150.4 - 55.5);
+    if (val <= 300) return 150.5 + ((val - 200) / 100) * (250.4 - 150.5);
+    return 250.5 + Math.min(250, ((val - 300) / 200) * (500.0 - 250.5));
+  }
+}
+
+/**
+ * updateTripImpactCard(route)
+ * Calculates cigarette equivalent using Berkeley Earth benchmark (22 µg/m³ PM2.5 over 24h ≈ 1 cigarette).
+ */
+function updateTripImpactCard(route) {
+  var card = document.getElementById("trip-impact-card");
+  if (!card) return;
+  if (!route) {
+    card.style.display = "none";
+    return;
+  }
+  card.style.display = "block";
+
+  var aqi = route.avgAqi || 100;
+  var estPm25 = aqiToEstimatedPm25(aqi, currentAqiScale);
+  var durMin = route.durationMin || 30;
+  var breathingFactor = route.breathingFactor || 1.0;
+
+  var cigEquivalent = (estPm25 * (durMin / 1440) * breathingFactor) / 22.0;
+  var cigDisplay = cigEquivalent < 0.05 ? "< 0.1 cigs" : cigEquivalent.toFixed(2) + " cigs";
+
+  var pm25El = document.getElementById("impact-pm25-val");
+  var cigEl = document.getElementById("impact-cig-val");
+  var descEl = document.getElementById("impact-desc");
+
+  if (pm25El) pm25El.textContent = Math.round(estPm25) + " µg/m³";
+  if (cigEl) cigEl.textContent = cigDisplay;
+  if (descEl) {
+    descEl.innerHTML =
+      "On this <strong>" + durMin + " min</strong> trip at ~<strong>" + Math.round(estPm25) + " µg/m³</strong> (" +
+      (breathingFactor > 1 ? breathingFactor + "× physical exertion" : "normal breathing") +
+      "), your total inhaled particulate mass is roughly equivalent to smoking <strong>" + cigDisplay + "</strong>.";
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// FEATURE 3: POLLUTION PULSE (METEOROLOGICAL REASONING & WIND INVERSION)
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+function updatePollutionPulse() {
+  var card = document.getElementById("pollution-pulse-card");
+  if (!card) return;
+
+  var speedEl = document.getElementById("pulse-wind-speed");
+  var dirEl = document.getElementById("pulse-wind-dir");
+  var tempEl = document.getElementById("pulse-temp");
+  var ventEl = document.getElementById("pulse-ventilation");
+  var badgeEl = document.getElementById("pulse-badge");
+  var narrativeEl = document.getElementById("pulse-narrative");
+
+  var url = FORECAST_API_URL + "?lat=28.6139&lng=77.2090";
+
+  fetch(url)
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      var cw = data.current_weather || {};
+      var windSpeed = cw.wind_speed_10m !== undefined ? cw.wind_speed_10m : (cw.windspeed || 0);
+      var windDir = cw.wind_direction_10m !== undefined ? cw.wind_direction_10m : (cw.winddirection || 0);
+      var temp = cw.temperature_2m !== undefined ? cw.temperature_2m : (cw.temperature || 24);
+
+      var directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+      var dirIdx = Math.round(windDir / 22.5) % 16;
+      var cardinal = directions[dirIdx];
+
+      if (speedEl) speedEl.textContent = windSpeed.toFixed(1) + " km/h";
+      if (dirEl) dirEl.textContent = Math.round(windDir) + "° (" + cardinal + ")";
+      if (tempEl) tempEl.textContent = temp.toFixed(1) + "°C";
+
+      var badge = "Moderate";
+      var ventStatus = "Slow Dispersion";
+      var narrative = "";
+
+      if (windSpeed < 6) {
+        badge = "Stagnant (Calm)";
+        ventStatus = "Trapped at Surface";
+        narrative = "Surface winds are calm (< 6 km/h), causing atmospheric stagnation. Without horizontal ventilation, local emissions from vehicles, construction, and biomass remain trapped close to ground level.";
+      } else if (windDir >= 270 && windDir <= 330) {
+        badge = "Northwesterly Inflow";
+        ventStatus = "Regional Inflow";
+        narrative = "Prevailing northwesterly winds (" + windSpeed.toFixed(1) + " km/h from " + cardinal + ") transport regional smoke, stubble burning particles, and agricultural haze from Punjab and Haryana into the Delhi bowl.";
+      } else if (windDir >= 80 && windDir <= 160) {
+        badge = "Moist Easterly";
+        ventStatus = "Humid Smog";
+        narrative = "Easterly winds bring high relative humidity from the Gangetic plains, causing hygroscopic particle growth and dense secondary aerosol smog formation.";
+      } else if (windSpeed >= 15) {
+        badge = "Active Dispersal";
+        ventStatus = "Good Dispersion";
+        narrative = "Brisk winds (" + windSpeed.toFixed(1) + " km/h) are actively ventilating the boundary layer, diluting and dispersing ambient pollutants across NCR.";
+      } else {
+        badge = "Moderate Breeze";
+        ventStatus = "Moderate";
+        narrative = "Light breeze from " + cardinal + " provides moderate atmospheric mixing, preventing extreme ground-level accumulation.";
+      }
+
+      if (badgeEl) badgeEl.textContent = badge;
+      if (ventEl) ventEl.textContent = ventStatus;
+      if (narrativeEl) narrativeEl.textContent = narrative;
+    })
+    .catch(function (err) {
+      console.warn("Pollution Pulse fetch error:", err);
+      if (narrativeEl) narrativeEl.textContent = "Live meteorological wind dynamics unavailable.";
+    });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// FEATURE 4: HEALTHY-HOME HELPER (VENTILATION & PURIFICATION GUIDE)
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+function updateHealthyHomeHelper() {
+  var card = document.getElementById("healthy-home-card");
+  if (!card) return;
+
+  var ventWindowEl = document.getElementById("home-vent-window");
+  var purifyActionEl = document.getElementById("home-purify-action");
+  var statusPill = document.getElementById("home-status-pill");
+
+  var url = FORECAST_API_URL + "?lat=28.6139&lng=77.2090";
+
+  fetch(url)
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (!data || !data.hourly || !data.hourly.time || !data.hourly.us_aqi) return;
+
+      var times = data.hourly.time;
+      var aqis = data.hourly.us_aqi;
+
+      var minAqi = 9999;
+      var bestHourStr = "12:00 PM – 3:00 PM";
+      var count = Math.min(24, times.length);
+
+      for (var i = 0; i < count; i++) {
+        var dt = new Date(times[i]);
+        var hour = dt.getHours();
+        var val = aqis[i] || 300;
+        if (hour >= 11 && hour <= 16) {
+          if (val < minAqi) {
+            minAqi = Math.round(val);
+            bestHourStr = (hour % 12 || 12) + ":00 " + (hour >= 12 ? "PM" : "AM") + " – " + ((hour + 2) % 12 || 12) + ":00 " + ((hour + 2) >= 12 ? "PM" : "AM");
+          }
+        }
+      }
+
+      if (minAqi === 9999) minAqi = 180;
+
+      if (minAqi < 120) {
+        if (statusPill) {
+          statusPill.textContent = "Safe Ventilation Window";
+          statusPill.style.background = "#059669";
+        }
+        if (ventWindowEl) {
+          ventWindowEl.innerHTML = "<strong>Best window: " + bestHourStr + "</strong> (Lowest forecast AQI ~" + minAqi + "). Brief cross-ventilation recommended to purge indoor CO2 and VOCs.";
+        }
+      } else {
+        if (statusPill) {
+          statusPill.textContent = "Keep Windows Sealed";
+          statusPill.style.background = "#dc2626";
+        }
+        if (ventWindowEl) {
+          ventWindowEl.innerHTML = "<strong>Do NOT open windows today.</strong> Outdoor AQI remains elevated (~" + minAqi + ") even during peak afternoon solar mixing.";
+        }
+      }
+
+      if (purifyActionEl) {
+        purifyActionEl.innerHTML = "Run HEPA air purifiers in occupied bedrooms on <strong>Medium/High</strong>. Keep internal doors closed to maintain clean air zones. Damp mop instead of dry dusting.";
+      }
+    })
+    .catch(function (err) {
+      console.warn("Healthy Home fetch error:", err);
+    });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// FEATURE 2: PERSONAL SAFETY & MASK ADVISOR
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+function renderPersonalSafetyAdvisor() {
+  var stationSelect = document.getElementById("advisor-station-select");
+  var activitySelect = document.getElementById("advisor-activity-select");
+  if (!stationSelect || !activitySelect) return;
+
+  if (stationSelect.options.length <= 1 && currentValidStations && currentValidStations.length > 0) {
+    var saved = getSavedPlaces();
+    if (saved.length > 0) {
+      var grpSaved = document.createElement("optgroup");
+      grpSaved.label = "Saved Places";
+      saved.forEach(function (p) {
+        var opt = document.createElement("option");
+        opt.value = "saved:" + p.name;
+        opt.textContent = "📍 " + p.name;
+        grpSaved.appendChild(opt);
+      });
+      stationSelect.appendChild(grpSaved);
+    }
+    var grpStations = document.createElement("optgroup");
+    grpStations.label = "Monitoring Stations";
+    currentValidStations.slice(0, 15).forEach(function (st) {
+      var opt = document.createElement("option");
+      opt.value = "station:" + st.id;
+      opt.textContent = st.name + " (AQI " + st.displayAqi + ")";
+      grpStations.appendChild(opt);
+    });
+    stationSelect.appendChild(grpStations);
+  }
+
+  var selVal = stationSelect.value;
+  var currentAqi = 150;
+
+  if (selVal.startsWith("saved:")) {
+    var pName = selVal.replace("saved:", "");
+    var p = getSavedPlaces().find(function (x) { return x.name === pName; });
+    if (p && currentValidStations && currentValidStations.length > 0) {
+      currentAqi = Math.round(computeIdw(p.lat, p.lng, currentValidStations));
+    }
+  } else if (selVal.startsWith("station:")) {
+    var stId = selVal.replace("station:", "");
+    var st = currentValidStations.find(function (x) { return String(x.id) === stId; });
+    if (st) currentAqi = st.displayAqi;
+  } else {
+    if (map && currentValidStations && currentValidStations.length > 0) {
+      var center = map.getCenter();
+      currentAqi = Math.round(computeIdw(center.lat, center.lng, currentValidStations));
+    }
+  }
+
+  var activity = activitySelect.value;
+  var mult = 1.0;
+  var actLabel = "Normal Walking";
+  if (activity === "run") { mult = 2.5; actLabel = "Running / Jogging"; }
+  else if (activity === "cycle") { mult = 2.2; actLabel = "Cycling"; }
+  else if (activity === "school") { mult = 1.4; actLabel = "School Commute"; }
+  else if (activity === "work") { mult = 2.0; actLabel = "Outdoor Work"; }
+
+  var multEl = document.getElementById("advisor-exertion-mult");
+  var multDescEl = document.getElementById("advisor-exertion-desc");
+  if (multEl) multEl.textContent = mult + "× Normal";
+  if (multDescEl) multDescEl.textContent = actLabel + " increases breathing minute volume from ~12 L/min to ~" + Math.round(12 * mult) + " L/min.";
+
+  var safeTimeEl = document.getElementById("advisor-safe-time");
+  var timeDescEl = document.getElementById("advisor-time-desc");
+  var maskTypeEl = document.getElementById("advisor-mask-type");
+  var maskReasonEl = document.getElementById("advisor-mask-reason");
+  var verdictBanner = document.getElementById("advisor-verdict-banner");
+  var verdictTitle = document.getElementById("advisor-verdict-title");
+  var verdictSubtitle = document.getElementById("advisor-verdict-subtitle");
+  var verdictIcon = document.getElementById("advisor-verdict-icon");
+  var aqiPill = document.getElementById("advisor-aqi-pill");
+
+  if (aqiPill) {
+    aqiPill.textContent = "AQI " + currentAqi;
+    aqiPill.style.background = getAqiColor(currentAqi, currentAqiScale);
+    aqiPill.style.color = getHealthAdvice(currentAqi, currentAqiScale).textColor;
+  }
+
+  var isSensitive = (currentHealthProfile === "child" || currentHealthProfile === "asthma" || currentHealthProfile === "elderly");
+
+  if (currentAqi <= 50) {
+    if (verdictBanner) verdictBanner.className = "advisor-verdict-banner verdict-safe";
+    if (verdictIcon) verdictIcon.textContent = "✅";
+    if (verdictTitle) verdictTitle.textContent = "Safe for Outdoor Activity";
+    if (verdictSubtitle) verdictSubtitle.textContent = "Air quality is good. Great conditions for exercise.";
+    if (safeTimeEl) safeTimeEl.textContent = "Unlimited";
+    if (timeDescEl) timeDescEl.textContent = "No restriction on outdoor duration.";
+    if (maskTypeEl) maskTypeEl.textContent = "None Needed";
+    if (maskReasonEl) maskReasonEl.textContent = "Ambient fine particulate is within safe health limits.";
+  } else if (currentAqi <= 100) {
+    if (isSensitive && mult > 1.2) {
+      if (verdictBanner) verdictBanner.className = "advisor-verdict-banner verdict-caution";
+      if (verdictIcon) verdictIcon.textContent = "⚠️";
+      if (verdictTitle) verdictTitle.textContent = "Caution for Sensitive Groups";
+      if (verdictSubtitle) verdictSubtitle.textContent = "Elevated particulate can trigger symptoms during high exertion.";
+      if (safeTimeEl) safeTimeEl.textContent = "Max 45 - 60 mins";
+      if (timeDescEl) timeDescEl.textContent = "Take rest breaks; carry rescue medication if asthmatic.";
+      if (maskTypeEl) maskTypeEl.textContent = "Cloth / Surgical Optional";
+      if (maskReasonEl) maskReasonEl.textContent = "Filters coarse dust and road soot.";
+    } else {
+      if (verdictBanner) verdictBanner.className = "advisor-verdict-banner verdict-safe";
+      if (verdictIcon) verdictIcon.textContent = "✅";
+      if (verdictTitle) verdictTitle.textContent = "Moderate - Generally Safe";
+      if (verdictSubtitle) verdictSubtitle.textContent = "Acceptable air quality for most individuals.";
+      if (safeTimeEl) safeTimeEl.textContent = "Normal Duration";
+      if (timeDescEl) timeDescEl.textContent = "Standard outdoor recreation permitted.";
+      if (maskTypeEl) maskTypeEl.textContent = "None Needed";
+      if (maskReasonEl) maskReasonEl.textContent = "Low risk for general public.";
+    }
+  } else if (currentAqi <= 200) {
+    if (verdictBanner) verdictBanner.className = "advisor-verdict-banner verdict-caution";
+    if (verdictIcon) verdictIcon.textContent = "⚠️";
+    if (verdictTitle) verdictTitle.textContent = "Unhealthy for Sensitive Groups";
+    if (verdictSubtitle) verdictSubtitle.textContent = "Cut back on prolonged or heavy exertion outdoors.";
+    if (safeTimeEl) safeTimeEl.textContent = (mult > 1.5 || isSensitive) ? "Max 20 - 30 mins" : "Max 45 mins";
+    if (timeDescEl) timeDescEl.textContent = "High exertion drives submicron particles deep into the lungs.";
+    if (maskTypeEl) maskTypeEl.textContent = "N95 / FFP2 Respirator";
+    if (maskReasonEl) maskReasonEl.textContent = "Surgical and cloth masks leak PM2.5 around edges. N95 provides sealed filtration.";
+  } else if (currentAqi <= 300) {
+    if (verdictBanner) verdictBanner.className = "advisor-verdict-banner verdict-danger";
+    if (verdictIcon) verdictIcon.textContent = "🛑";
+    if (verdictTitle) verdictTitle.textContent = "Poor / Very Unhealthy";
+    if (verdictSubtitle) verdictSubtitle.textContent = "Avoid outdoor workouts and prolonged exposure.";
+    if (safeTimeEl) safeTimeEl.textContent = (mult > 1.5 || isSensitive) ? "0 mins (Avoid Outdoor)" : "Max 15 - 20 mins";
+    if (timeDescEl) timeDescEl.textContent = "Substitute outdoor training with indoor gym or home exercises.";
+    if (maskTypeEl) maskTypeEl.textContent = "N95 Respirator Mandatory";
+    if (maskReasonEl) maskReasonEl.textContent = "Ambient air contains high particulate concentrations; sealed filtration is vital.";
+  } else {
+    if (verdictBanner) verdictBanner.className = "advisor-verdict-banner verdict-danger";
+    if (verdictIcon) verdictIcon.textContent = "☣️";
+    if (verdictTitle) verdictTitle.textContent = "Severe / Hazardous - Stay Indoors";
+    if (verdictSubtitle) verdictSubtitle.textContent = "Public health emergency. Emergency transit only.";
+    if (safeTimeEl) safeTimeEl.textContent = "0 mins (Stay Indoors)";
+    if (timeDescEl) timeDescEl.textContent = "All physical activity outdoors is hazardous. Keep windows sealed.";
+    if (maskTypeEl) maskTypeEl.textContent = "N95 / N99 Respirator";
+    if (maskReasonEl) maskReasonEl.textContent = "Severe toxic smog causes acute respiratory inflammation.";
+  }
+}
+
+// Wire Advisor Event Listeners
+var advisorStationSelect = document.getElementById("advisor-station-select");
+if (advisorStationSelect) {
+  advisorStationSelect.addEventListener("change", renderPersonalSafetyAdvisor);
+}
+var advisorActivitySelect = document.getElementById("advisor-activity-select");
+if (advisorActivitySelect) {
+  advisorActivitySelect.addEventListener("change", renderPersonalSafetyAdvisor);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// FEATURE 5: PARENTS & SCHOOL AIR SAFETY MODE
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+var schoolCurrentLang = "en";
+
+function renderSchoolMode() {
+  var stationSelect = document.getElementById("school-station-select");
+  if (!stationSelect) return;
+
+  if (stationSelect.options.length <= 1 && currentValidStations && currentValidStations.length > 0) {
+    var saved = getSavedPlaces();
+    if (saved.length > 0) {
+      var grpSaved = document.createElement("optgroup");
+      grpSaved.label = "Saved Locations";
+      saved.forEach(function (p) {
+        var opt = document.createElement("option");
+        opt.value = "saved:" + p.name;
+        opt.textContent = "📍 " + p.name;
+        grpSaved.appendChild(opt);
+      });
+      stationSelect.appendChild(grpSaved);
+    }
+    var grpStations = document.createElement("optgroup");
+    grpStations.label = "School Districts / Stations";
+    currentValidStations.slice(0, 15).forEach(function (st) {
+      var opt = document.createElement("option");
+      opt.value = "station:" + st.id;
+      opt.textContent = st.name;
+      grpStations.appendChild(opt);
+    });
+    stationSelect.appendChild(grpStations);
+  }
+
+  var selVal = stationSelect.value;
+  var currentAqi = 180;
+  var locName = "Delhi NCR";
+
+  if (selVal.startsWith("saved:")) {
+    var pName = selVal.replace("saved:", "");
+    var p = getSavedPlaces().find(function (x) { return x.name === pName; });
+    if (p && currentValidStations && currentValidStations.length > 0) {
+      currentAqi = Math.round(computeIdw(p.lat, p.lng, currentValidStations));
+      locName = p.name;
+    }
+  } else if (selVal.startsWith("station:")) {
+    var stId = selVal.replace("station:", "");
+    var st = currentValidStations.find(function (x) { return String(x.id) === stId; });
+    if (st) {
+      currentAqi = st.displayAqi;
+      locName = st.name;
+    }
+  } else {
+    if (map && currentValidStations && currentValidStations.length > 0) {
+      var center = map.getCenter();
+      currentAqi = Math.round(computeIdw(center.lat, center.lng, currentValidStations));
+      locName = "Central Delhi Area";
+    }
+  }
+
+  var lightRed = document.getElementById("light-red");
+  var lightAmber = document.getElementById("light-amber");
+  var lightGreen = document.getElementById("light-green");
+  var verdictTextEl = document.getElementById("school-verdict-text");
+  var aqiPill = document.getElementById("school-aqi-pill");
+  var instructionTextEl = document.getElementById("school-instruction-text");
+
+  var verdictEn = "";
+  var verdictHi = "";
+  var catEn = "";
+  var catHi = "";
+  var instEn = "";
+  var instHi = "";
+
+  if (currentAqi <= 100) {
+    if (lightGreen) lightGreen.classList.add("active");
+    if (lightAmber) lightAmber.classList.remove("active");
+    if (lightRed) lightRed.classList.remove("active");
+
+    verdictEn = "OUTDOOR PLAY SAFE";
+    verdictHi = "बाहरी खेल सुरक्षित है";
+    catEn = "Satisfactory";
+    catHi = "संतोषजनक";
+    instEn = "Children can participate in outdoor morning assemblies, PE sports periods, and playground recess normally.";
+    instHi = "बच्चे सामान्य रूप से सुबह की प्रार्थना सभा, खेल-कूद और मैदान में खेल सकते हैं।";
+  } else if (currentAqi <= 200) {
+    if (lightGreen) lightGreen.classList.remove("active");
+    if (lightAmber) lightAmber.classList.add("active");
+    if (lightRed) lightRed.classList.remove("active");
+
+    verdictEn = "MODIFIED PLAY (CAUTION)";
+    verdictHi = "सीमित खेल (सावधानी)";
+    catEn = "Moderate / Poor";
+    catHi = "मध्यम / खराब";
+    instEn = "Cancel intense cardio and endurance sports. Allow light recreation with frequent water breaks. Children with asthma should remain indoors.";
+    instHi = "कठिन शारीरिक खेल स्थगित करें। केवल हल्का खेल खेलें और पर्याप्त पानी पिएं। सांस या अस्थमा से पीड़ित बच्चे अंदर रहें।";
+  } else {
+    if (lightGreen) lightGreen.classList.remove("active");
+    if (lightAmber) lightAmber.classList.remove("active");
+    if (lightRed) lightRed.classList.add("active");
+
+    verdictEn = "NO OUTDOOR PLAY";
+    verdictHi = "बाहरी खेल पूरी तरह बंद";
+    catEn = "Severe / Hazardous";
+    catHi = "अति गंभीर / खतरनाक";
+    instEn = "Cancel all outdoor assemblies, sports, and playground breaks. Keep all classroom doors and windows sealed, and run indoor air filtration where installed.";
+    instHi = "सभी बाहरी सभाएं और खेल तुरंत रद्द करें। कक्षा के खिड़की-दरवाजे बंद रखें और बच्चों को पूरी तरह इनडोर रखें।";
+  }
+
+  if (verdictTextEl) verdictTextEl.textContent = verdictEn;
+  if (aqiPill) {
+    aqiPill.textContent = "AQI " + currentAqi + " (" + catEn + ")";
+    aqiPill.style.background = getAqiColor(currentAqi, currentAqiScale);
+    aqiPill.style.color = getHealthAdvice(currentAqi, currentAqiScale).textColor;
+  }
+  if (instructionTextEl) instructionTextEl.textContent = instEn;
+
+  var msgEn = "🚨 Delhi AQI Sentinel - School Air Safety Alert\n" +
+    "📍 Location: " + locName + "\n" +
+    "💨 Air Quality: AQI " + currentAqi + " (" + catEn + ")\n" +
+    "🚦 Outdoor Play: " + verdictEn + "\n" +
+    "📋 Guidance: " + instEn + "\n" +
+    "🌐 Check live map: " + window.location.origin;
+
+  var msgHi = "🚨 दिल्ली AQI सेंटिनल - स्कूल वायु सुरक्षा अलर्ट\n" +
+    "📍 स्थान: " + locName + "\n" +
+    "💨 वायु गुणवत्ता: AQI " + currentAqi + " (" + catHi + ")\n" +
+    "🚦 खेल निर्णय: " + verdictHi + "\n" +
+    "📋 निर्देश: " + instHi + "\n" +
+    "🌐 लाइव मैप देखें: " + window.location.origin;
+
+  var previewEl = document.getElementById("school-message-preview");
+  var waBtn = document.getElementById("btn-wa-school-share");
+
+  var activeMsg = (schoolCurrentLang === "hi") ? msgHi : msgEn;
+  if (previewEl) previewEl.value = activeMsg;
+  if (waBtn) waBtn.href = "https://api.whatsapp.com/send?text=" + encodeURIComponent(activeMsg);
+}
+
+// Wire School Mode Buttons
+var schoolStationSelect = document.getElementById("school-station-select");
+if (schoolStationSelect) {
+  schoolStationSelect.addEventListener("change", renderSchoolMode);
+}
+
+var btnLangEn = document.getElementById("btn-lang-en");
+var btnLangHi = document.getElementById("btn-lang-hi");
+if (btnLangEn && btnLangHi) {
+  btnLangEn.addEventListener("click", function () {
+    schoolCurrentLang = "en";
+    btnLangEn.classList.add("active");
+    btnLangHi.classList.remove("active");
+    renderSchoolMode();
+  });
+  btnLangHi.addEventListener("click", function () {
+    schoolCurrentLang = "hi";
+    btnLangHi.classList.add("active");
+    btnLangEn.classList.remove("active");
+    renderSchoolMode();
+  });
+}
+
+var btnCopySchoolMsg = document.getElementById("btn-copy-school-msg");
+if (btnCopySchoolMsg) {
+  btnCopySchoolMsg.addEventListener("click", function () {
+    var previewEl = document.getElementById("school-message-preview");
+    if (!previewEl) return;
+    navigator.clipboard.writeText(previewEl.value).then(function () {
+      var oldText = btnCopySchoolMsg.textContent;
+      btnCopySchoolMsg.textContent = "✅ Copied!";
+      setTimeout(function () {
+        btnCopySchoolMsg.textContent = oldText;
+      }, 2000);
+    });
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// FEATURE 6: STATION COMPARISON & LIVE RANKINGS
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+function renderStationComparison() {
+  if (!currentValidStations || currentValidStations.length === 0) return;
+
+  var s1 = document.getElementById("compare-select-1");
+  var s2 = document.getElementById("compare-select-2");
+  var s3 = document.getElementById("compare-select-3");
+  var container = document.getElementById("compare-cards-container");
+  var cleanestList = document.getElementById("rank-cleanest-list");
+  var pollutedList = document.getElementById("rank-polluted-list");
+
+  if (!s1 || !s2 || !s3 || !container) return;
+
+  if (s1.options.length === 0) {
+    [s1, s2, s3].forEach(function (sel, idx) {
+      sel.innerHTML = "";
+      currentValidStations.forEach(function (st) {
+        var opt = document.createElement("option");
+        opt.value = st.id;
+        opt.textContent = st.name;
+        sel.appendChild(opt);
+      });
+      if (currentValidStations.length > idx) {
+        sel.selectedIndex = idx;
+      }
+    });
+  }
+
+  container.innerHTML = "";
+  var selectedIds = [s1.value, s2.value, s3.value];
+  selectedIds.forEach(function (stId) {
+    var st = currentValidStations.find(function (x) { return String(x.id) === String(stId); });
+    if (!st) return;
+
+    var aqi = st.displayAqi;
+    var advice = getHealthAdvice(aqi, currentAqiScale);
+    var color = getAqiColor(aqi, currentAqiScale);
+
+    var card = document.createElement("div");
+    card.className = "compare-stat-card";
+    card.innerHTML =
+      '<div class="compare-card-top">' +
+        '<strong class="compare-station-name">' + escapeHtml(st.name) + '</strong>' +
+        '<span class="compare-aqi-pill" style="background:' + color + ';color:' + advice.textColor + ';">AQI ' + aqi + '</span>' +
+      '</div>' +
+      '<div class="compare-metric-row">' +
+        '<span class="compare-metric-label">Category:</span>' +
+        '<strong>' + escapeHtml(advice.category) + '</strong>' +
+      '</div>' +
+      '<div class="compare-metric-row">' +
+        '<span class="compare-metric-label">PM2.5:</span>' +
+        '<strong>' + (st.pm25 !== null && st.pm25 !== undefined ? st.pm25 + ' µg/m³' : '--') + '</strong>' +
+      '</div>' +
+      '<div class="compare-metric-row">' +
+        '<span class="compare-metric-label">PM10:</span>' +
+        '<strong>' + (st.pm10 !== null && st.pm10 !== undefined ? st.pm10 + ' µg/m³' : '--') + '</strong>' +
+      '</div>' +
+      '<div class="compare-metric-row">' +
+        '<span class="compare-metric-label">Primary Pollutant:</span>' +
+        '<strong>' + (st.dominantPollutant ? st.dominantPollutant.toUpperCase() : 'PM2.5') + '</strong>' +
+      '</div>' +
+      '<p class="compare-card-advice">' + escapeHtml(advice.general) + '</p>';
+
+    container.appendChild(card);
+  });
+
+  var sortedStations = currentValidStations.slice().sort(function (a, b) {
+    return a.displayAqi - b.displayAqi;
+  });
+
+  if (cleanestList) {
+    cleanestList.innerHTML = "";
+    sortedStations.slice(0, 5).forEach(function (st, idx) {
+      var li = document.createElement("li");
+      li.className = "rank-item";
+      li.innerHTML =
+        '<span class="rank-num">#' + (idx + 1) + '</span>' +
+        '<span class="rank-name">' + escapeHtml(st.name) + '</span>' +
+        '<span class="rank-aqi" style="background:' + getAqiColor(st.displayAqi, currentAqiScale) + ';color:' + getHealthAdvice(st.displayAqi, currentAqiScale).textColor + ';">AQI ' + st.displayAqi + '</span>';
+      cleanestList.appendChild(li);
+    });
+  }
+
+  if (pollutedList) {
+    pollutedList.innerHTML = "";
+    sortedStations.slice(-5).reverse().forEach(function (st, idx) {
+      var li = document.createElement("li");
+      li.className = "rank-item";
+      li.innerHTML =
+        '<span class="rank-num">#' + (idx + 1) + '</span>' +
+        '<span class="rank-name">' + escapeHtml(st.name) + '</span>' +
+        '<span class="rank-aqi" style="background:' + getAqiColor(st.displayAqi, currentAqiScale) + ';color:' + getHealthAdvice(st.displayAqi, currentAqiScale).textColor + ';">AQI ' + st.displayAqi + '</span>';
+      pollutedList.appendChild(li);
+    });
+  }
+}
+
+// Wire Comparison Dropdowns
+["compare-select-1", "compare-select-2", "compare-select-3"].forEach(function (id) {
+  var sel = document.getElementById(id);
+  if (sel) sel.addEventListener("change", renderStationComparison);
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// FEATURE 7: IN-TAB BROWSER AQI ALERTS (WITHOUT A SERVER)
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+function initAqiAlerts() {
+  var btn = document.getElementById("btn-toggle-alerts");
+  var desc = document.getElementById("alerts-status-desc");
+  if (!btn) return;
+
+  function updateBtn() {
+    if (!("Notification" in window)) {
+      btn.textContent = "Not Supported";
+      btn.disabled = true;
+      if (desc) desc.textContent = "Browser notifications are not supported in this environment.";
+      return;
+    }
+    if (Notification.permission === "granted") {
+      var enabled = localStorage.getItem("delhi_aqi_alerts_enabled") === "true";
+      btn.textContent = enabled ? "🔔 Alerts Active" : "Enable Alerts";
+      btn.className = enabled ? "btn-sm btn-primary" : "btn-sm";
+      if (desc) {
+        desc.textContent = enabled
+          ? "✅ Active. You will receive a browser notification if a saved place crosses your " + currentHealthProfile + " threshold while this tab is open."
+          : "Click to turn on in-tab alerts for your saved places.";
+      }
+    } else if (Notification.permission === "denied") {
+      btn.textContent = "Blocked";
+      btn.disabled = true;
+      if (desc) desc.textContent = "Notifications are blocked in your browser settings.";
+    } else {
+      btn.textContent = "Enable Alerts";
+    }
+  }
+
+  btn.addEventListener("click", function () {
+    if (!("Notification" in window)) return;
+    if (Notification.permission === "granted") {
+      var enabled = localStorage.getItem("delhi_aqi_alerts_enabled") === "true";
+      localStorage.setItem("delhi_aqi_alerts_enabled", (!enabled).toString());
+      updateBtn();
+      if (!enabled) checkSavedPlacesAlerts();
+    } else {
+      Notification.requestPermission().then(function (permission) {
+        if (permission === "granted") {
+          localStorage.setItem("delhi_aqi_alerts_enabled", "true");
+          updateBtn();
+          checkSavedPlacesAlerts();
+        } else {
+          updateBtn();
+        }
+      });
+    }
+  });
+
+  updateBtn();
+}
+
+function checkSavedPlacesAlerts() {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  if (localStorage.getItem("delhi_aqi_alerts_enabled") !== "true") return;
+  if (!currentValidStations || currentValidStations.length === 0) return;
+
+  var places = getSavedPlaces();
+  if (places.length === 0) return;
+
+  var profile = HEALTH_PROFILES[currentHealthProfile] || HEALTH_PROFILES.adult;
+  var threshold = profile.threshold;
+  var now = Date.now();
+  var COOLDOWN_MS = 60 * 60 * 1000; // 1 hour between alerts per place
+
+  places.forEach(function (p) {
+    var aqi = Math.round(computeIdw(p.lat, p.lng, currentValidStations));
+    if (aqi > threshold) {
+      var key = "delhi_aqi_alert_last_" + p.name;
+      var lastAlertTime = parseInt(localStorage.getItem(key) || "0", 10);
+      if (now - lastAlertTime > COOLDOWN_MS) {
+        localStorage.setItem(key, now.toString());
+        var nTitle = "🚨 Delhi AQI Alert: " + p.name;
+        var nBody = p.name + " AQI reached " + aqi + " (" + getAqiCategory(aqi, currentAqiScale) + "), crossing your " + profile.label + " threshold of " + threshold + ". Take precautions!";
+        try {
+          new Notification(nTitle, {
+            body: nBody,
+            icon: "/icons/icon-192.png",
+            tag: "aqi-alert-" + p.name
+          });
+        } catch (e) {
+          console.warn("Could not dispatch notification:", e);
+        }
+      }
+    }
+  });
+}
+
+// Initialize Browser Alerts
+initAqiAlerts();
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // FEATURE 8: PWA SERVICE WORKER REGISTRATION & INSTALL PROMPT
-// ══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
-// 1. Register Service Worker for offline caching & PWA compliance
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () {
     navigator.serviceWorker
@@ -3904,7 +4713,6 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-// 2. Handle beforeinstallprompt for one-tap home screen installation
 var deferredInstallPrompt = null;
 var pwaInstallBtn = document.getElementById("pwa-install-btn");
 
@@ -3939,6 +4747,5 @@ window.addEventListener("appinstalled", function () {
   if (pwaInstallBtn) pwaInstallBtn.style.display = "none";
 });
 
-
-
-
+// Initial Router Bootstrap
+switchPage(window.location.hash || "map");

@@ -47,8 +47,11 @@
     <nav class="nav-links">
       <a href="#map" id="nav-map" class="nav-link active" data-page="map">🗺️ Live Map</a>
       <a href="#now" id="nav-now" class="nav-link" data-page="now">📊 Delhi AQI Now</a>
-      <a href="#areas" id="nav-areas" class="nav-link" data-page="areas">📋 Areas</a>
       <a href="#commute" id="nav-commute" class="nav-link" data-page="commute">🚌 Commute</a>
+      <a href="#advisor" id="nav-advisor" class="nav-link" data-page="advisor">😷 Safety Advisor</a>
+      <a href="#school" id="nav-school" class="nav-link" data-page="school">🎒 School &amp; Kids</a>
+      <a href="#compare" id="nav-compare" class="nav-link" data-page="compare">⚖️ Compare</a>
+      <a href="#areas" id="nav-areas" class="nav-link" data-page="areas">📋 Areas</a>
       <a href="#guide" id="nav-guide" class="nav-link" data-page="guide">🩺 Health Guide</a>
       <a href="#about" id="nav-about" class="nav-link" data-page="about">ℹ️ About</a>
     </nav>
@@ -121,6 +124,15 @@
             <button id="add-saved-place-btn" type="button" class="btn-sm">+ Save Current Location</button>
           </div>
           <div id="saved-places-list" class="saved-places-list"></div>
+          <div class="saved-places-alert-box" style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--glass-border); font-size: 0.82rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span><strong>🔔 Tab AQI Alerts</strong></span>
+              <button id="btn-toggle-alerts" class="btn-sm" type="button" style="padding: 3px 8px; font-size: 0.75rem;">Enable Alerts</button>
+            </div>
+            <div id="alerts-status-desc" style="color: var(--text-secondary); font-size: 0.74rem; line-height: 1.3;">
+              Notifies you if any saved place crosses your active profile threshold while this tab is open.
+            </div>
+          </div>
         </div>
 
         <div class="search-row">
@@ -160,6 +172,30 @@
             <span id="advice-aqi-pill" class="advice-aqi-pill">--</span>
           </div>
           <div id="advice-message" class="advice-message">Checking local air quality…</div>
+        </div>
+
+        <!-- Trip Cigarette & Exposure Impact Card (Feature 9) -->
+        <div id="trip-impact-card" class="trip-impact-card" style="display: none;">
+          <div class="impact-header">
+            <span class="impact-title">🫁 Trip Health &amp; Inhalation Impact</span>
+            <span class="impact-tag">Rough Estimate</span>
+          </div>
+          <div class="impact-body">
+            <div class="impact-stat-row">
+              <div class="impact-stat-item">
+                <span class="impact-label">PM2.5 Exposure</span>
+                <strong id="impact-pm25-val">-- µg/m³</strong>
+              </div>
+              <div class="impact-stat-item">
+                <span class="impact-label">Estimated Inhalation</span>
+                <strong id="impact-cig-val">--</strong>
+              </div>
+            </div>
+            <p id="impact-desc" class="impact-desc">Selecting route...</p>
+            <div class="impact-disclaimer">
+              ℹ️ <strong>Documented Rule of Thumb:</strong> Based on the Berkeley Earth benchmark (22 µg/m³ of PM2.5 over 24 hours is approximately equivalent to 1 cigarette in total inhaled particulate mass). This is an educational comparison to help visualize fine particulate volume, <em>not medical advice or diagnosis</em>.
+            </div>
+          </div>
         </div>
 
         <!-- Route results list -->
@@ -252,6 +288,81 @@
         </div>
       </div>
 
+      <!-- Feature 3: Pollution Pulse (Meteorological Reasoning & Wind Inversion) -->
+      <div id="pollution-pulse-card" class="now-pulse-card">
+        <div class="pulse-header">
+          <div class="pulse-title-group">
+            <span class="pulse-icon">🧭</span>
+            <div>
+              <h3 class="pulse-heading">Pollution Pulse &amp; Atmospheric Dynamics</h3>
+              <p class="pulse-subheading">Meteorological dispersal conditions across Delhi NCR</p>
+            </div>
+          </div>
+          <span id="pulse-badge" class="pulse-badge">Stagnant</span>
+        </div>
+        <div class="pulse-body">
+          <div class="pulse-metrics-row">
+            <div class="pulse-metric">
+              <span class="pulse-metric-label">Wind Speed</span>
+              <strong id="pulse-wind-speed">-- km/h</strong>
+            </div>
+            <div class="pulse-metric">
+              <span class="pulse-metric-label">Wind Direction</span>
+              <strong id="pulse-wind-dir">--° (--)</strong>
+            </div>
+            <div class="pulse-metric">
+              <span class="pulse-metric-label">Temperature</span>
+              <strong id="pulse-temp">--°C</strong>
+            </div>
+            <div class="pulse-metric">
+              <span class="pulse-metric-label">Ventilation Status</span>
+              <strong id="pulse-ventilation">Trapped</strong>
+            </div>
+          </div>
+          <p id="pulse-narrative" class="pulse-narrative">Analyzing weather and wind dynamics from Open-Meteo…</p>
+          <div class="pulse-hint-footer">
+            <em>General meteorological hint based on ambient wind &amp; temperature — not an official source apportionment.</em>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feature 4: Healthy-Home Helper (Ventilation & Filter Window) -->
+      <div id="healthy-home-card" class="now-home-card">
+        <div class="home-card-header">
+          <div class="home-title-group">
+            <span class="home-icon">🏡</span>
+            <div>
+              <h3 class="home-heading">Healthy-Home &amp; Ventilation Guide</h3>
+              <p class="home-subheading">Optimal window opening hours vs. indoor air purification</p>
+            </div>
+          </div>
+          <span id="home-status-pill" class="home-status-pill">Calculating...</span>
+        </div>
+        <div class="home-card-body">
+          <div class="home-advice-grid">
+            <div class="home-advice-box box-ventilate">
+              <span class="box-icon">🪟</span>
+              <div>
+                <strong>Window Airing Window</strong>
+                <p id="home-vent-window">Evaluating 24h hourly curve…</p>
+              </div>
+            </div>
+            <div class="home-advice-box box-purify">
+              <span class="box-icon">🌀</span>
+              <div>
+                <strong>Air Purifier Action</strong>
+                <p id="home-purify-action">Evaluating indoor risk…</p>
+              </div>
+            </div>
+          </div>
+          <ul class="home-action-list" id="home-action-list">
+            <li>Keep bedroom windows sealed during peak traffic and early morning temperature inversion.</li>
+            <li>Run HEPA air cleaners continuously in occupied bedrooms if ambient AQI exceeds 150.</li>
+            <li>Use damp mopping instead of dry dusting to avoid re-suspending settled particulate matter.</li>
+          </ul>
+        </div>
+      </div>
+
       <!-- 24-Hour Trend Chart Card (Styled like uploaded image) -->
       <div class="now-chart-card">
         <div class="chart-header">
@@ -336,21 +447,21 @@
       <!-- Main commute card shown when Home + Work exist -->
       <div id="commute-card" class="commute-card" style="display: none;">
 
-        <!-- Header row: home → work with live AQI pills -->
+        <!-- Header row: home → work with live AQI pills & Direction Swap (Feature 1 Enhancement) -->
         <div class="commute-endpoints">
-          <div class="commute-endpoint">
-            <span class="commute-ep-icon">🏠</span>
+          <div class="commute-endpoint" id="commute-origin-box">
+            <span class="commute-ep-icon" id="commute-origin-icon">🏠</span>
             <div class="commute-ep-info">
-              <span class="commute-ep-label">Home</span>
+              <span class="commute-ep-label" id="commute-origin-label">Origin</span>
               <strong id="commute-home-name">--</strong>
             </div>
             <span id="commute-home-aqi" class="commute-aqi-pill">--</span>
           </div>
-          <div class="commute-arrow">→</div>
-          <div class="commute-endpoint">
-            <span class="commute-ep-icon">🏢</span>
+          <button id="commute-swap-btn" class="commute-swap-btn" type="button" title="Swap direction (Home ⇄ Work)">⇄</button>
+          <div class="commute-endpoint" id="commute-dest-box">
+            <span class="commute-ep-icon" id="commute-dest-icon">🏢</span>
             <div class="commute-ep-info">
-              <span class="commute-ep-label">Work</span>
+              <span class="commute-ep-label" id="commute-dest-label">Destination</span>
               <strong id="commute-work-name">--</strong>
             </div>
             <span id="commute-work-aqi" class="commute-aqi-pill">--</span>
@@ -393,10 +504,16 @@
           <!-- Exposure difference callout -->
           <div id="commute-exposure-diff" class="commute-exposure-diff" style="display: none;"></div>
 
-          <!-- Best departure time (reuses fetchLeaveTimeSuggestion logic) -->
+          <!-- Leave-Time Suggestion Box -->
           <div id="commute-leave-time" class="commute-leave-time" style="display: none;">
             <div class="leave-time-header">⏱️ <strong>Best Time to Leave</strong></div>
             <div id="commute-leave-time-text" class="leave-time-text">Checking forecast…</div>
+          </div>
+
+          <!-- Feature 1 Twist: Return Trip Evening Outlook -->
+          <div id="commute-return-forecast" class="commute-return-box" style="display: none;">
+            <div class="return-forecast-header">🌙 <strong>Evening Return Outlook</strong></div>
+            <div id="commute-return-text" class="return-forecast-text">Analyzing return trip conditions...</div>
           </div>
 
           <!-- View on Map button -->
@@ -415,7 +532,238 @@
   </main>
 
   <!-- ════════════════════════════════════════════════════════════════════════════
-       PAGE 3: AREAS (#areas)
+       PAGE 7: PERSONAL SAFETY & MASK ADVISOR (#advisor - Feature 2)
+       ════════════════════════════════════════════════════════════════════════════ -->
+  <main id="view-advisor" class="page-view" style="display: none;">
+    <div class="page-container glass-container">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">😷 Personal Safety &amp; Mask Advisor</h2>
+          <p class="section-desc">Activity-tailored outdoor duration limits, mask guidelines, and exertion ratings</p>
+        </div>
+      </div>
+
+      <!-- Main Advisor Card -->
+      <div class="advisor-main-card">
+        <!-- Target Area Selector & Profile Summary -->
+        <div class="advisor-control-row">
+          <div class="advisor-select-group">
+            <label for="advisor-station-select">📍 Check Location:</label>
+            <select id="advisor-station-select" class="advisor-dropdown">
+              <option value="current">Current Location / Map Center</option>
+            </select>
+          </div>
+          <div class="advisor-select-group">
+            <label for="advisor-activity-select">🏃 Activity Type:</label>
+            <select id="advisor-activity-select" class="advisor-dropdown">
+              <option value="walk">🚶 Normal Walk (1.0x exertion)</option>
+              <option value="run">🏃 Jogging / Running (2.5x exertion)</option>
+              <option value="cycle">🚴 Fast Cycling (2.2x exertion)</option>
+              <option value="school">🎒 School Commute / Children (1.4x)</option>
+              <option value="work">🔨 Outdoor Manual Work (2.0x exertion)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Verdict Banner (Green / Amber / Red) -->
+        <div id="advisor-verdict-banner" class="advisor-verdict-banner verdict-caution">
+          <div class="verdict-icon-wrap" id="advisor-verdict-icon">⚠️</div>
+          <div class="verdict-text-wrap">
+            <div class="verdict-title" id="advisor-verdict-title">Caution Required</div>
+            <div class="verdict-subtitle" id="advisor-verdict-subtitle">Sensitive groups should limit exertion</div>
+          </div>
+          <div class="verdict-aqi-badge" id="advisor-aqi-pill">AQI --</div>
+        </div>
+
+        <!-- Key Recommendations 3-Column Grid -->
+        <div class="advisor-grid">
+          <div class="advisor-card card-time">
+            <div class="advisor-card-icon">⏱️</div>
+            <div class="advisor-card-info">
+              <span class="card-label">Safe Outdoor Time</span>
+              <strong id="advisor-safe-time">Max 30 mins</strong>
+              <p id="advisor-time-desc">Breathing volume spikes under exertion</p>
+            </div>
+          </div>
+
+          <div class="advisor-card card-mask">
+            <div class="advisor-card-icon">😷</div>
+            <div class="advisor-card-info">
+              <span class="card-label">Recommended Mask</span>
+              <strong id="advisor-mask-type">N95 Respirator</strong>
+              <p id="advisor-mask-reason">Surgical masks leak fine PM2.5</p>
+            </div>
+          </div>
+
+          <div class="advisor-card card-exertion">
+            <div class="advisor-card-icon">🫁</div>
+            <div class="advisor-card-info">
+              <span class="card-label">Inhaled Volume</span>
+              <strong id="advisor-exertion-mult">2.5× Normal</strong>
+              <p id="advisor-exertion-desc">Equivalent to breathing higher AQI</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Config Rules Transparent Table -->
+        <div class="advisor-table-box">
+          <h4 class="advisor-table-title">Transparent Guideline Matrix</h4>
+          <table class="advisor-matrix-table">
+            <thead>
+              <tr>
+                <th>Profile</th>
+                <th>AQI 0-50</th>
+                <th>51-100</th>
+                <th>101-200</th>
+                <th>201-300</th>
+                <th>301+</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Healthy Adult</strong></td>
+                <td>Safe (No Mask)</td>
+                <td>Safe</td>
+                <td>Caution (Cloth/Surgical)</td>
+                <td>Limit 45m (N95)</td>
+                <td>Avoid (N95 if needed)</td>
+              </tr>
+              <tr>
+                <td><strong>Elderly / Heart</strong></td>
+                <td>Safe</td>
+                <td>Limit 60m</td>
+                <td>Limit 30m (N95)</td>
+                <td>Avoid (N95)</td>
+                <td>Stay Indoors</td>
+              </tr>
+              <tr>
+                <td><strong>Asthma / Respiratory</strong></td>
+                <td>Safe</td>
+                <td>Limit 45m</td>
+                <td>Limit 20m (N95)</td>
+                <td>Avoid (N95)</td>
+                <td>Stay Indoors</td>
+              </tr>
+              <tr>
+                <td><strong>Child</strong></td>
+                <td>Safe</td>
+                <td>Safe</td>
+                <td>Limit Sports (N95)</td>
+                <td>No Outdoor Play</td>
+                <td>Stay Indoors</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════
+       PAGE 8: SCHOOL & KIDS MODE (#school - Feature 5)
+       ════════════════════════════════════════════════════════════════════════════ -->
+  <main id="view-school" class="page-view" style="display: none;">
+    <div class="page-container glass-container">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">🎒 School &amp; Kids Air Safety</h2>
+          <p class="section-desc">Instant traffic-light indicator for outdoor play, morning assembly, and bilingual parent shares</p>
+        </div>
+      </div>
+
+      <div class="school-card">
+        <!-- Area Selector for School/Home -->
+        <div class="school-area-row">
+          <label for="school-station-select">🏫 Select School Area:</label>
+          <select id="school-station-select" class="school-dropdown">
+            <option value="nearest">Nearest Monitoring Station</option>
+          </select>
+        </div>
+
+        <!-- Big Traffic Light Indicator -->
+        <div class="school-traffic-box" id="school-traffic-box">
+          <div class="traffic-lights">
+            <span class="light light-red" id="light-red"></span>
+            <span class="light light-amber" id="light-amber"></span>
+            <span class="light light-green" id="light-green"></span>
+          </div>
+          <div class="traffic-content">
+            <div class="traffic-verdict" id="school-verdict-text">NO OUTDOOR PLAY</div>
+            <div class="traffic-aqi" id="school-aqi-pill">AQI 280 (Very Poor)</div>
+            <p class="traffic-instruction" id="school-instruction-text">
+              Cancel all outdoor assemblies, sports periods, and playground breaks today.
+            </p>
+          </div>
+        </div>
+
+        <!-- Preformatted Share Message Card -->
+        <div class="school-share-box">
+          <div class="share-box-header">
+            <h4>📲 Forward to School / Class WhatsApp Group</h4>
+            <div class="lang-switch-pills">
+              <button type="button" class="lang-pill active" id="btn-lang-en">English</button>
+              <button type="button" class="lang-pill" id="btn-lang-hi">हिंदी</button>
+            </div>
+          </div>
+          <textarea id="school-message-preview" class="school-message-preview" readonly rows="4"></textarea>
+          <div class="school-btn-row">
+            <button type="button" id="btn-copy-school-msg" class="btn-primary">📋 Copy Text</button>
+            <a id="btn-wa-school-share" class="btn-whatsapp" href="#" target="_blank" rel="noopener">🟢 Send on WhatsApp</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════
+       PAGE 9: STATION COMPARISON & RANKINGS (#compare - Feature 6)
+       ════════════════════════════════════════════════════════════════════════════ -->
+  <main id="view-compare" class="page-view" style="display: none;">
+    <div class="page-container glass-container">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">⚖️ Station Comparison &amp; Live Rankings</h2>
+          <p class="section-desc">Pick up to 3 monitoring areas side-by-side, plus live Top 5 cleanest vs. most polluted</p>
+        </div>
+      </div>
+
+      <!-- Pick up to 3 stations -->
+      <div class="compare-selector-card">
+        <h4 style="margin: 0 0 10px; color: var(--text-primary);">Select Up to 3 Monitoring Areas:</h4>
+        <div class="compare-selectors-grid">
+          <select id="compare-select-1" class="compare-dropdown"></select>
+          <select id="compare-select-2" class="compare-dropdown"></select>
+          <select id="compare-select-3" class="compare-dropdown"></select>
+        </div>
+      </div>
+
+      <!-- Side-by-Side Comparison Cards Grid -->
+      <div class="compare-cards-grid" id="compare-cards-container">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Leaderboard: Top 5 Cleanest vs Top 5 Most Polluted -->
+      <div class="rankings-grid">
+        <div class="ranking-panel rank-cleanest">
+          <div class="rank-header">
+            <span>🟢 Top 5 Cleanest NCR Areas</span>
+          </div>
+          <ul class="rank-list" id="rank-cleanest-list">
+            <li>Loading stations...</li>
+          </ul>
+        </div>
+
+        <div class="ranking-panel rank-polluted">
+          <div class="rank-header">
+            <span>🔴 Top 5 Most Polluted NCR Areas</span>
+          </div>
+          <ul class="rank-list" id="rank-polluted-list">
+            <li>Loading stations...</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </main>
        ════════════════════════════════════════════════════════════════════════════ -->
   <main id="view-areas" class="page-view" style="display: none;">
     <div class="page-container glass-container">

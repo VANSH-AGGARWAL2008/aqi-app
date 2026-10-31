@@ -2201,3 +2201,640 @@ body.dark-mode .leaflet-tile-pane {
     font-size: 11px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   FEATURES 1, 2, 3, 4, 5, 6, 7, 9 STYLES
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Feature 1: Commute Direction Swap & Return Outlook ── */
+.commute-swap-btn {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: var(--accent-cyan);
+  font-size: 1.25rem;
+  font-weight: 700;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.commute-swap-btn:hover {
+  background: var(--accent-cyan);
+  color: #0b1329;
+  transform: scale(1.1);
+}
+.commute-return-box {
+  background: rgba(147, 51, 234, 0.08);
+  border: 1px solid rgba(147, 51, 234, 0.25);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+.return-forecast-header {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #c084fc;
+  margin-bottom: 4px;
+}
+.return-forecast-text {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* ── Feature 3: Pollution Pulse Card ── */
+.now-pulse-card, .now-home-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 16px;
+}
+.pulse-header, .home-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.pulse-title-group, .home-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pulse-icon, .home-icon {
+  font-size: 1.8rem;
+}
+.pulse-heading, .home-heading {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.pulse-subheading, .home-subheading {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+.pulse-badge, .home-status-pill {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(234, 179, 8, 0.18);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  text-transform: uppercase;
+}
+.pulse-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+@media (max-width: 600px) {
+  .pulse-metrics-row { grid-template-columns: repeat(2, 1fr); }
+}
+.pulse-metric {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pulse-metric-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.pulse-metric strong {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+.pulse-narrative {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin: 0 0 10px;
+}
+.pulse-hint-footer {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ── Feature 4: Healthy Home Helper ── */
+.home-advice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+@media (max-width: 600px) {
+  .home-advice-grid { grid-template-columns: 1fr; }
+}
+.home-advice-box {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  display: flex;
+  gap: 12px;
+}
+.box-ventilate {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.box-purify {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+.home-advice-box .box-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+.home-advice-box strong {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.home-advice-box p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.home-action-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* ── Feature 2: Personal Safety & Mask Advisor ── */
+.advisor-main-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px;
+}
+.advisor-control-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 600px) {
+  .advisor-control-row { grid-template-columns: 1fr; }
+}
+.advisor-select-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.advisor-select-group label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.advisor-dropdown, .school-dropdown, .compare-dropdown {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  width: 100%;
+}
+.advisor-verdict-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+.verdict-icon-wrap {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+.verdict-text-wrap {
+  flex: 1;
+  min-width: 160px;
+}
+.verdict-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+.verdict-subtitle {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+.verdict-aqi-badge {
+  font-size: 1.1rem;
+  font-weight: 800;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.25);
+  margin-left: auto;
+}
+.verdict-safe { background: rgba(34, 197, 94, 0.15); border-color: #22c55e; color: #22c55e; }
+.verdict-caution { background: rgba(234, 179, 8, 0.15); border-color: #eab308; color: #eab308; }
+.verdict-avoid { background: rgba(239, 68, 68, 0.15); border-color: #ef4444; color: #ef4444; }
+
+.advisor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+@media (max-width: 700px) {
+  .advisor-grid { grid-template-columns: 1fr; }
+}
+.advisor-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.advisor-card-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+.advisor-card-info .card-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  display: block;
+}
+.advisor-card-info strong {
+  font-size: 1.05rem;
+  color: var(--text-primary);
+  display: block;
+  margin: 3px 0;
+}
+.advisor-card-info p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.advisor-table-box {
+  border-top: 1px solid var(--border-color);
+  padding-top: 18px;
+}
+.advisor-table-title {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+.advisor-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.advisor-matrix-table th, .advisor-matrix-table td {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  text-align: left;
+}
+.advisor-matrix-table th {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+
+/* ── Feature 5: School & Kids Mode ── */
+.school-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 24px;
+}
+.school-area-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.school-area-row label {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+}
+.school-traffic-box {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.traffic-lights {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #111827;
+  padding: 12px;
+  border-radius: 30px;
+  border: 2px solid #374151;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.light {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  opacity: 0.25;
+  transition: all 0.3s ease;
+}
+.light-red { background: #ef4444; }
+.light-amber { background: #f59e0b; }
+.light-green { background: #10b981; }
+.light.active {
+  opacity: 1.0;
+  box-shadow: 0 0 16px currentColor;
+}
+.traffic-content {
+  flex: 1;
+  min-width: 200px;
+}
+.traffic-verdict {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  margin-bottom: 4px;
+}
+.traffic-aqi {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.traffic-instruction {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+.school-share-box {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+}
+.share-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.share-box-header h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+.lang-switch-pills {
+  display: flex;
+  gap: 4px;
+}
+.lang-pill {
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.lang-pill.active {
+  background: var(--accent-blue);
+  color: #fff;
+  border-color: var(--accent-blue);
+}
+.school-message-preview {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.88rem;
+  padding: 10px;
+  resize: vertical;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.school-btn-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.btn-whatsapp {
+  background: #25d366;
+  color: #ffffff;
+  padding: 9px 18px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+.btn-whatsapp:hover {
+  background: #1eb954;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* ── Feature 6: Compare & Rank ── */
+.compare-selector-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.compare-selectors-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+@media (max-width: 600px) {
+  .compare-selectors-grid { grid-template-columns: 1fr; }
+}
+.compare-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+@media (max-width: 700px) {
+  .compare-cards-grid { grid-template-columns: 1fr; }
+}
+.compare-col-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 16px;
+}
+.compare-col-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compare-col-aqi {
+  font-size: 2.2rem;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.compare-col-badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 14px;
+  margin-bottom: 12px;
+}
+.compare-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  padding: 4px 0;
+  border-top: 1px solid var(--border-color);
+}
+.rankings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 600px) {
+  .rankings-grid { grid-template-columns: 1fr; }
+}
+.ranking-panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 16px;
+}
+.rank-header {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+.rank-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.rank-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 0;
+  font-size: 0.88rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.rank-list li:last-child {
+  border-bottom: none;
+}
+.rank-aqi-pill {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+/* ── Feature 9: Trip Cigarette Equivalence ── */
+.trip-impact-card {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 10px;
+}
+.impact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.impact-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #38bdf8;
+}
+.impact-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.impact-stat-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.impact-stat-item {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  padding: 10px;
+  border-radius: 10px;
+}
+.impact-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  display: block;
+}
+.impact-stat-item strong {
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  display: block;
+  margin-top: 2px;
+}
+.impact-desc {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+.impact-disclaimer {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  border-top: 1px solid var(--border-color);
+  padding-top: 8px;
+}
